@@ -11,7 +11,12 @@ export type Product = {
   sales: number;
   file: { name: string; size: number; type: string };
   cover: string | null;
+  listedAt: number;
 };
+
+export type Access = { buyer: string | null; download: string | null; txHash: string | null };
+
+export type Sale = { productId: number; title: string; price: string | null; buyer: string; txHash: string; at: number };
 
 async function json<T>(res: Response): Promise<T> {
   const body = await res.json().catch(() => ({}));
@@ -22,10 +27,11 @@ async function json<T>(res: Response): Promise<T> {
 export const api = {
   products: (creator?: string) =>
     fetch(creator ? `/api/products?creator=${encodeURIComponent(creator)}` : "/api/products").then((r) => json<Product[]>(r)),
+  sales: () => fetch("/api/sales").then((r) => json<Sale[]>(r)),
   product: (id: string | number) => fetch(`/api/products/${id}`).then((r) => json<Product>(r)),
   /** The download link if a wallet proven in this browser owns the product. */
   access: (id: string | number) =>
-    fetch(`/api/products/${id}/access`).then((r) => json<{ buyer: string | null; download: string | null }>(r)),
+    fetch(`/api/products/${id}/access`).then((r) => json<Access>(r)),
   draft: (form: FormData) => fetch("/api/drafts", { method: "POST", body: form }).then((r) => json<{ draftId: string }>(r)),
   publish: (draftId: string, productId: number) =>
     fetch(`/api/drafts/${draftId}/publish`, {

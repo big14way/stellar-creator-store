@@ -56,9 +56,14 @@ export function openDb(dataDir: string) {
       buyer text not null,
       tx_hash text not null,
       created_at integer not null,
+      price text,
       primary key (product_id, buyer)
     );
   `);
+  // Databases created before purchases kept the price paid.
+  try {
+    db.exec("alter table purchases add column price text");
+  } catch {}
 
   const insertDraft = db.prepare(`insert into drafts values
     (:id, :creator, :title, :description, :file_key, :file_name, :file_type, :file_size, :cover_key, :cover_type, :created_at)`);
@@ -69,7 +74,12 @@ export function openDb(dataDir: string) {
   const getProduct = db.prepare("select * from products where id = ?");
   const productsBy = db.prepare("select * from products where creator = ? order by id desc");
   const latest = db.prepare("select * from products order by id desc limit ?");
-  const insertPurchase = db.prepare("insert or ignore into purchases values (?, ?, ?, ?)");
+  const insertPurchase = db.prepare(
+    "insert or ignore into purchases (product_id, buyer, tx_hash, created_at, price) values (?, ?, ?, ?, ?)",
+  );
+  const getPurchase = db.prepare("select tx_hash from purchases where product_id = ? and buyer = ?");
+  const recentSales = db.prepare(`select s.product_id, s.buyer, s.tx_hash, s.created_at, s.price, p.title
+    from purchases s join products p on p.id = s.product_id order by s.created_at desc limit ?`);
 
   return {
     addDraft: (d: Draft) => insertDraft.run(d),
@@ -92,8 +102,19 @@ export function openDb(dataDir: string) {
     product: (id: number) => getProduct.get(id) as ProductRow | undefined,
     productsBy: (creator: string) => productsBy.all(creator) as ProductRow[],
     latest: (n: number) => latest.all(n) as ProductRow[],
-    addPurchase: (productId: number, buyer: string, txHash: string) =>
-      insertPurchase.run(productId, buyer, txHash, Date.now()),
+    addPurchase: (productId: number, buyer: string, txHash: string, price: string | null) =>
+      insertPurchase.run(productId, buyer, txHash, Date.now(), price),
+    purchaseTx: (productId: number, buyer: string) =>
+      (getPurchase.get(productId, buyer) as { tx_hash: string } | undefined)?.tx_hash ?? null,
+    recentSales: (n: number) =>
+      recentSales.all(n) as {
+        product_id: number;
+        buyer: string;
+        tx_hash: string;
+        created_at: number;
+        price: string | null;
+        title: string;
+      }[],
   };
 }
 

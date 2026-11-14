@@ -84,6 +84,7 @@ function publicProduct(row: ProductRow, chain: ChainProduct) {
     sales: chain.sales,
     file: { name: row.file_name, size: row.file_size, type: row.file_type },
     cover: row.cover_key ? `/api/products/${row.id}/cover` : null,
+    listedAt: row.created_at,
   };
 }
 
@@ -115,7 +116,8 @@ app.post("/api/relay", async (c) => {
     if (call?.fn === "buy") {
       const buyer = Address.fromScVal(call.args[0]).toString();
       const productId = Number(scValToNative(call.args[1]));
-      db.addPurchase(productId, buyer, result.hash);
+      const receipt = result.returnValue ? (scValToNative(result.returnValue) as { price?: bigint }) : null;
+      db.addPurchase(productId, buyer, result.hash, receipt?.price?.toString() ?? null);
     }
     return c.json({ success: true, hash: result.hash, status: "SUCCESS" });
   } catch (err) {
@@ -177,6 +179,21 @@ app.post("/api/drafts/:id/publish", async (c) => {
   return c.json(publicProduct(row, chain));
 });
 
+// ---- recent sales (from purchases made through this store) ----
+
+app.get("/api/sales", (c) =>
+  c.json(
+    db.recentSales(12).map((s) => ({
+      productId: s.product_id,
+      title: s.title,
+      price: s.price,
+      buyer: s.buyer,
+      txHash: s.tx_hash,
+      at: s.created_at,
+    })),
+  ),
+);
+
 // ---- products ----
 
 app.get("/api/products", async (c) => {
@@ -208,10 +225,14 @@ app.get("/api/products/:id/access", async (c) => {
   if (!db.product(id)) return c.json({ error: "product not found" }, 404);
   for (const wallet of await session.proven(c)) {
     if (await hasPurchased(id, wallet)) {
-      return c.json({ buyer: wallet, download: `/d/${session.downloadToken(id, wallet)}` });
+      return c.json({
+        buyer: wallet,
+        download: `/d/${session.downloadToken(id, wallet)}`,
+        txHash: db.purchaseTx(id, wallet),
+      });
     }
   }
-  return c.json({ buyer: null, download: null });
+  return c.json({ buyer: null, download: null, txHash: null });
 });
 
 app.get("/d/:token", async (c) => {

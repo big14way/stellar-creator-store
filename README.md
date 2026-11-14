@@ -81,6 +81,8 @@ Last run, 14 Nov 2026: Circle's testnet USDC, 5% platform fee, a 10 USDC product
 - **Dashboard:** balance, sales, products, and claiming any share held for the creator.
 - **Testnet faucet:** a "Get 10 test USDC" button, so anyone can try a purchase.
 
+The look is a warm shop at night with cream paper receipts: Gabarito, Manrope and Azeret Mono (Google Fonts, OFL), Lucide icons (ISC), and our own logo, covers and receipts drawn in CSS and SVG. The receipts and the sales ticker show real sales from the store, each linked to its transaction.
+
 ### Fees and trust
 
 The server's sponsor account pays every network fee ([`server/sponsor.ts`](app/server/sponsor.ts)). It pays only for creating a passkey wallet from the approved wallet code and for `buy`, `create_product`, `update_product` and `claim` on our store from a smart wallet. It refuses anything the sponsor would authorize just by paying the fee, and caps the fee per transaction ([rules](app/server/policy.ts), [tests](app/tests/policy.test.ts)).
