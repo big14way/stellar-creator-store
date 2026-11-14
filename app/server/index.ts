@@ -388,9 +388,11 @@ app.patch("/api/products/:id", async (c) => {
 
 app.get("/api/sales", async (c) => {
   const creator = c.req.query("creator");
-  const rows = await db.recentSales(creator ? 50 : 12, isWallet(creator) ? creator : undefined);
+  const own = isWallet(creator);
+  const rows = await db.recentSales(50, own ? creator : undefined);
+  // The public feed leaves out listings the operator hid; a creator's own list keeps everything.
   return c.json(
-    rows.map((s) => ({
+    (own ? rows : rows.filter((s) => !HIDDEN.has(s.product_id)).slice(0, 12)).map((s) => ({
       productId: s.product_id,
       title: s.title,
       price: s.price,

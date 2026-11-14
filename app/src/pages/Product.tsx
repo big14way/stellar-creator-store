@@ -229,7 +229,7 @@ export function ProductPage({ id }: { id: string }) {
                 {by}
               </Link>
             </p>
-            {product.description && <p className="lead">{product.description}</p>}
+            {product.description && <p className="lead description">{product.description}</p>}
             <p className="price" data-testid="price">
               ${formatUsdc(price)}
             </p>

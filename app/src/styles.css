@@ -1470,3 +1470,6 @@ a.box:hover {
     padding: 20px;
   }
 }
+
+/* Keep the creator's own paragraphs and line breaks. */
+.description { white-space: pre-line; }
