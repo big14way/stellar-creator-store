@@ -1,12 +1,13 @@
 // Which wallets this browser has proven it controls, and download links.
 //
-// A wallet is "proven" when this browser submitted, through our server, a
-// transaction that the wallet signed with its passkey and that succeeded on
-// chain. Only the browser holding the passkey had that signed payload.
+// A wallet is "proven" when this browser either
+// - submitted, through our server, a transaction the wallet signed (with its
+//   passkey, or with a Stellar wallet's key) that succeeded on chain, or
+// - signed one of our one-time sign-in challenges with it (see auth.ts).
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
-import { getSignedCookie, setSignedCookie } from "hono/cookie";
+import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 
 const COOKIE = "cs_wallets";
 const MAX_WALLETS = 10;
@@ -14,11 +15,12 @@ const MAX_WALLETS = 10;
 export function sessions(secret: string, secureCookies: boolean) {
   async function proven(c: Context): Promise<string[]> {
     const value = await getSignedCookie(c, secret, COOKIE);
-    return value ? value.split(",").filter((w) => /^C[A-Z2-7]{55}$/.test(w)) : [];
+    return value ? value.split(",").filter((w) => /^[CG][A-Z2-7]{55}$/.test(w)) : [];
   }
 
-  async function prove(c: Context, wallets: string[]) {
-    if (wallets.length === 0) return;
+  /** Adds wallets to this browser's proven set. The newest comes first. */
+  async function prove(c: Context, wallets: string[]): Promise<string[]> {
+    if (wallets.length === 0) return proven(c);
     const merged = [...new Set([...wallets, ...(await proven(c))])].slice(0, MAX_WALLETS);
     await setSignedCookie(c, COOKIE, merged.join(","), secret, {
       httpOnly: true,
@@ -27,6 +29,7 @@ export function sessions(secret: string, secureCookies: boolean) {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
+    return merged;
   }
 
   const mac = (productId: number, buyer: string) =>
@@ -47,5 +50,10 @@ export function sessions(secret: string, secureCookies: boolean) {
     return { productId, buyer };
   }
 
-  return { proven, prove, downloadToken, readDownloadToken };
+  /** Forgets every wallet this browser proved. */
+  function forget(c: Context) {
+    deleteCookie(c, COOKIE, { path: "/", secure: secureCookies });
+  }
+
+  return { proven, prove, forget, downloadToken, readDownloadToken };
 }

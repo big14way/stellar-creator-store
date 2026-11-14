@@ -1,4 +1,3 @@
 dist/
 .data/
-.data-test/
-.data-demo/
+.data-*/

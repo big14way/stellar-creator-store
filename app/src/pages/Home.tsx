@@ -61,7 +61,7 @@ export function Home() {
             {sales.length > 0 && (
               <Receipt className="tilt">
                 <div className="receipt-head">
-                  <span>Creator Store · recent sales</span>
+                  <span>Paperstall · recent sales</span>
                   <span className="verified">On chain</span>
                 </div>
                 <div className="receipt-rows">
@@ -103,8 +103,8 @@ export function Home() {
               <span className="num">01</span>
               <h3>Buyer pays</h3>
               <div>
-                <span className="row-meta">Passkey wallet · USDC</span>
-                <p>Fingerprint or face, no app to install. The store covers the network fee.</p>
+                <span className="row-meta">Passkey or Stellar wallet · USDC</span>
+                <p>A fingerprint or face makes a wallet, or pay from Freighter, LOBSTR or xBull. The store covers the network fee.</p>
               </div>
             </li>
             <li>
@@ -129,6 +129,14 @@ export function Home() {
               <div>
                 <span className="row-meta">On-chain receipt · private link</span>
                 <p>The buyer downloads at once and keeps a link that works on any device.</p>
+              </div>
+            </li>
+            <li>
+              <span className="num">05</span>
+              <h3>Cash out when you want</h3>
+              <div>
+                <span className="row-meta">Stellar anchor · SEP-24</span>
+                <p>Keep dollars, send them to any Stellar wallet, or cash out to a bank through an anchor.</p>
               </div>
             </li>
           </ol>

@@ -26,7 +26,9 @@ export function faucet(secret: string) {
     try {
       prepared = await server.prepareTransaction(tx);
     } catch (err) {
-      return { ok: false, error: `faucet could not send: ${err instanceof Error ? err.message : err}` };
+      const message = err instanceof Error ? err.message : String(err);
+      if (/trustline/i.test(message)) return { ok: false, error: "Add USDC to this wallet first, then try again." };
+      return { ok: false, error: `faucet could not send: ${message}` };
     }
     prepared.sign(keypair);
     const sent = await server.sendTransaction(prepared);

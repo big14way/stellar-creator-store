@@ -1,7 +1,8 @@
-import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
 import { Link } from "wouter";
-import type { Product, Sale } from "./api";
+import { api, type Product, type Rates, type Sale } from "./api";
 import { formatUsdc } from "./chain";
+import { EXPLORER } from "./config";
 
 /** Our mark: a receipt with a torn edge and a four-point star cut out of it. */
 export function Logo({ size = 26 }: { size?: number }) {
@@ -145,7 +146,40 @@ export function Status({ children, testId }: { children: ReactNode; testId?: str
   );
 }
 
-export const explorerTx = (hash: string) => `https://stellar.expert/explorer/testnet/tx/${hash}`;
+export const explorerTx = (hash: string) => `${EXPLORER}/tx/${hash}`;
+export const explorerAccount = (address: string) =>
+  `${EXPLORER}/${address.startsWith("C") ? "contract" : "account"}/${address}`;
+
+export function useRates(): Rates | null {
+  const [rates, setRates] = useState<Rates | null>(null);
+  useEffect(() => {
+    api.rates().then(setRates);
+  }, []);
+  return rates;
+}
+
+const whole = (n: number) => Math.round(n).toLocaleString("en-NG");
+
+/** "≈ ₦13,520 · GH₵118" for a USDC amount, from the day's mid-market rate. */
+export function Local({ usdc, className }: { usdc: bigint; className?: string }) {
+  const rates = useRates();
+  if (!rates) return null;
+  const usd = Number(usdc) / 1e7;
+  return (
+    <span className={`local ${className ?? ""}`} title={`Mid-market estimate, ${rates.updated}`}>
+      ≈ ₦{whole(usd * rates.NGN)} · GH₵{whole(usd * rates.GHS)}
+    </span>
+  );
+}
+
+/** The rate source's required credit, shown wherever we show an estimate. */
+export function RatesCredit() {
+  return (
+    <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer" className="rates-credit">
+      Rates By Exchange Rate API
+    </a>
+  );
+}
 
 export function clock(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

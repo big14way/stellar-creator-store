@@ -1,5 +1,5 @@
 {
-  "name": "creator-store-app",
+  "name": "paperstall-app",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,14 +9,18 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "start": "NODE_ENV=production tsx server/index.ts",
     "test:e2e": "tsx tests/store-flow.ts",
-    "api": "tsx server/index.ts"
+    "api": "tsx server/index.ts",
+    "test:cashout": "tsx tests/cashout.ts"
   },
   "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "2.8.0",
     "@hono/node-server": "^2.1.8",
+    "@simplewebauthn/browser": "13.3.0",
     "@stellar/stellar-sdk": "16.4.1",
     "buffer": "^6.0.3",
     "hono": "^4.13.18",
     "lucide-react": "^1.73.0",
+    "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "smart-account-kit": "0.10.0",
@@ -24,6 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
@@ -31,5 +36,8 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vite": "^8.3.8"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

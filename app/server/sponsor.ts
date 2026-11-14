@@ -2,15 +2,12 @@
 // The sponsor signs only as the transaction source; `policy.ts` decides what
 // it will pay for.
 
-import { BASE_FEE, Keypair, Operation, TransactionBuilder, rpc, type xdr } from "@stellar/stellar-sdk";
+import { BASE_FEE, Keypair, Operation, TransactionBuilder, rpc, type Transaction, type xdr } from "@stellar/stellar-sdk";
 import { NETWORK_PASSPHRASE, RPC_URL } from "../src/config";
-import type { Decoded } from "./policy";
-
-// Most a single sponsored transaction may cost us in resource fees: 0.5 XLM.
-const MAX_RESOURCE_FEE = 5_000_000;
+import { MAX_RESOURCE_FEE, type Decoded } from "./policy";
 
 export type Submitted =
-  | { ok: true; hash: string; returnValue?: xdr.ScVal }
+  | { ok: true; hash: string; ledger: number; returnValue?: xdr.ScVal }
   | { ok: false; error: string; hash?: string };
 
 export function sponsor(secret: string) {
@@ -27,7 +24,7 @@ export function sponsor(secret: string) {
     const sim = await server.simulateTransaction(draft);
     if (rpc.Api.isSimulationError(sim)) return { ok: false, error: `simulation failed: ${sim.error}` };
     if (rpc.Api.isSimulationRestore(sim)) return { ok: false, error: "ledger entries need restoring first" };
-    if (Number(sim.minResourceFee) > MAX_RESOURCE_FEE) {
+    if (BigInt(sim.minResourceFee) > MAX_RESOURCE_FEE) {
       return { ok: false, error: `resource fee ${sim.minResourceFee} is above the sponsor's cap` };
     }
 
@@ -40,14 +37,31 @@ export function sponsor(secret: string) {
     }
 
     tx.sign(keypair);
+    return send(tx);
+  }
+
+  /**
+   * Pays the fee for a transaction a classic Stellar wallet signed as its
+   * own source, by wrapping it in a fee-bump transaction. `policy.ts`
+   * decides which transactions qualify.
+   */
+  async function feeBump(inner: Transaction): Promise<Submitted> {
+    const sim = await server.simulateTransaction(inner);
+    if (rpc.Api.isSimulationError(sim)) return { ok: false, error: `simulation failed: ${sim.error}` };
+    const outer = TransactionBuilder.buildFeeBumpTransaction(keypair, BASE_FEE, inner, NETWORK_PASSPHRASE);
+    outer.sign(keypair);
+    return send(outer);
+  }
+
+  async function send(tx: Parameters<rpc.Server["sendTransaction"]>[0]): Promise<Submitted> {
     const sent = await server.sendTransaction(tx);
     if (sent.status !== "PENDING") return { ok: false, error: `rejected by the network: ${sent.status}`, hash: sent.hash };
     const done = await server.pollTransaction(sent.hash, { attempts: 30, sleepStrategy: () => 1000 });
     if (done.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
       return { ok: false, error: `transaction ${done.status}`, hash: sent.hash };
     }
-    return { ok: true, hash: sent.hash, returnValue: done.returnValue };
+    return { ok: true, hash: sent.hash, ledger: done.ledger, returnValue: done.returnValue };
   }
 
-  return { address: keypair.publicKey(), submit };
+  return { address: keypair.publicKey(), submit, feeBump };
 }

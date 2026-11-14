@@ -1,8 +1,8 @@
 // What the fee sponsor will pay for. Pure functions, so they can be tested
 // without a network or a key.
 
-import { Address, xdr } from "@stellar/stellar-sdk";
-import { ACCOUNT_WASM_HASH, STORE_ID } from "../src/config";
+import { Address, Operation, Transaction, xdr } from "@stellar/stellar-sdk";
+import { ACCOUNT_WASM_HASH, STORE_ID, USDC_ID } from "../src/config";
 
 export type Decoded = { func: xdr.HostFunction; auth: xdr.SorobanAuthorizationEntry[] };
 
@@ -27,7 +27,7 @@ const STORE_CALLS: Record<string, { walletArg?: number; needsAuth: boolean }> = 
   buy: { walletArg: 0, needsAuth: true }, // buyer
   create_product: { walletArg: 0, needsAuth: true }, // creator
   update_product: { needsAuth: true }, // the contract checks it is the creator
-  claim: { walletArg: 0, needsAuth: false }, // pays only `to`; no signature needed
+  claim: { needsAuth: false }, // pays only `to`, so anyone may trigger it for anyone
 };
 
 /** Why this call will not be sponsored, or null if it will. */
@@ -36,6 +36,7 @@ export function refusal(
   sponsorAddress: string,
   store = STORE_ID,
   walletWasmHash = ACCOUNT_WASM_HASH,
+  usdc = USDC_ID,
 ): string | null {
   for (const entry of auth) {
     const signer = addressSigner(entry);
@@ -48,8 +49,15 @@ export function refusal(
       const call = func.invokeContract();
       const contract = Address.fromScAddress(call.contractAddress()).toString();
       const fn = call.functionName().toString();
+      // A smart wallet sending its own USDC (cashing out to an anchor, or to another wallet).
+      if (contract === usdc && fn === "transfer") {
+        const from = call.args()[0] ? Address.fromScVal(call.args()[0]).toString() : "";
+        if (!from.startsWith("C")) return "only smart wallets are sponsored";
+        if (auth.length === 0 || !auth.every((a) => addressSigner(a) === from)) return "the sending wallet must sign";
+        return null;
+      }
       const rule = contract === store ? STORE_CALLS[fn] : undefined;
-      if (!rule) return `only ${Object.keys(STORE_CALLS).join(", ")} on ${store} are sponsored`;
+      if (!rule) return `only ${Object.keys(STORE_CALLS).join(", ")} on ${store}, and USDC transfers, are sponsored`;
       if (rule.needsAuth && auth.length === 0) return "no authorization entries";
       if (rule.walletArg !== undefined) {
         const arg = call.args()[rule.walletArg];
@@ -99,4 +107,40 @@ function addressSigner(entry: xdr.SorobanAuthorizationEntry): string | null {
     default:
       return null;
   }
+}
+
+/** Most a sponsored transaction may cost us in resource fees: 0.5 XLM. */
+export const MAX_RESOURCE_FEE = 5_000_000n;
+
+/** Store functions a classic Stellar account (G...) may send with the fee paid by us. */
+const FEE_BUMP_CALLS = new Set(["buy", "claim"]);
+
+/**
+ * Why we will not pay the fee for this transaction from a classic Stellar
+ * wallet, or null if we will. The wallet signed it as the source; we wrap it
+ * in a fee-bump transaction, so it can only spend the wallet's own funds.
+ */
+export function feeBumpRefusal(tx: Transaction, sponsorAddress: string, store = STORE_ID): string | null {
+  if (!tx.source.startsWith("G")) return "the source must be a Stellar account";
+  if (tx.source === sponsorAddress) return "the sponsor never sends its own calls this way";
+  if (tx.operations.length !== 1) return "exactly one operation";
+  const op = tx.operations[0];
+  if (op.type !== "invokeHostFunction") return "only contract calls are sponsored";
+  if (op.source && op.source !== tx.source) return "the operation must use the transaction's source";
+  const { func, auth = [] } = op as Operation.InvokeHostFunction;
+  if (func.switch() !== xdr.HostFunctionType.hostFunctionTypeInvokeContract()) return "only contract calls are sponsored";
+  const call = func.invokeContract();
+  const contract = Address.fromScAddress(call.contractAddress()).toString();
+  const fn = call.functionName().toString();
+  if (contract !== store || !FEE_BUMP_CALLS.has(fn)) return `only ${[...FEE_BUMP_CALLS].join(" and ")} on ${store} are sponsored`;
+  const first = call.args()[0];
+  if (!first || Address.fromScVal(first).toString() !== tx.source) return "the wallet can only buy or claim for itself";
+  for (const entry of auth) {
+    const signer = addressSigner(entry);
+    if (signer !== null && signer !== tx.source) return "only the wallet itself may authorize";
+  }
+  const data = tx.toEnvelope().v1().tx().ext();
+  if (data.switch() !== 1) return "missing Soroban resources";
+  if (BigInt(data.sorobanData().resourceFee().toString()) > MAX_RESOURCE_FEE) return "resource fee is above the sponsor's cap";
+  return null;
 }

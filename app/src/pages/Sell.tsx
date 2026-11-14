@@ -1,7 +1,7 @@
 import { Fingerprint, Plus, Tag, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
-import { api } from "../api";
+import { api, type Config } from "../api";
 import { formatUsdc, parseUsdc, read } from "../chain";
 import { STORE_ID } from "../config";
 import { Eyebrow, Receipt, Spec, Status, TagButton } from "../ui";
@@ -26,6 +26,11 @@ export function Sell() {
   const { wallet, restoring, create, signIn } = useWallet();
   const [, navigate] = useLocation();
   const feeBps = useStoreFee();
+  const [config, setConfig] = useState<Config | null>(null);
+  useEffect(() => {
+    api.config().then(setConfig).catch(() => {});
+  }, []);
+  const maxMb = config?.maxFileMb ?? 50;
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("5");
   const [affiliatePct, setAffiliatePct] = useState("10");
@@ -136,7 +141,7 @@ export function Sell() {
             </div>
             <Spec
               rows={[
-                { label: "Your file", value: "Up to 50 MB" },
+                { label: "Your file", value: `Up to ${maxMb} MB` },
                 { label: "A price", value: "In USDC" },
                 { label: "A passkey", value: "Fingerprint or face" },
                 { label: "XLM", value: "None" },
@@ -174,7 +179,7 @@ export function Sell() {
               <label>
                 File buyers download
                 <input name="file" type="file" required />
-                <span className="hint">Up to 50 MB. Only buyers can download it.</span>
+                <span className="hint">Up to {maxMb} MB. Only buyers can download it.</span>
               </label>
               <label>
                 Cover image

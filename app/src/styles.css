@@ -1,4 +1,4 @@
-/* Creator Store design system: warm dark shop, cream paper, orange tags, receipt details. */
+/* Paperstall design system: warm dark shop, cream paper, orange tags, receipt details. */
 
 :root {
   --ink: #17100c;
@@ -1268,6 +1268,128 @@ a.box:hover {
   text-transform: uppercase;
 }
 
+/* ---------- payments, library, shop, cash-out ---------- */
+
+.local {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--on-dark-dim);
+}
+
+.cream .local,
+.receipt .local {
+  color: var(--on-light-dim);
+}
+
+.rates-credit {
+  font-size: 12px;
+}
+
+.or {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--on-dark-dim);
+}
+
+.or::before,
+.or::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--rule-dark);
+}
+
+.pay-alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.library {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 28px 22px;
+}
+
+.library-item .receipt-title {
+  display: block;
+  text-decoration: none;
+}
+
+.library-item .tag {
+  margin-top: 6px;
+}
+
+.side-card {
+  border: 1px solid var(--rule-dark);
+  padding: 26px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  margin-bottom: 22px;
+}
+
+.prefixed {
+  display: flex;
+  align-items: stretch;
+}
+
+.prefixed .mono {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--rule-light);
+  border-right: 0;
+  background: var(--cream);
+  color: var(--ink);
+  text-transform: none;
+}
+
+.co-held-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.row-actions {
+  white-space: nowrap;
+}
+
+.row-actions .text-link + .text-link {
+  margin-left: 14px;
+}
+
+.row-actions .text-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.edit-row td {
+  background: rgb(23 16 12 / 0.04);
+  padding: 22px 16px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 22px;
+}
+
+.anchor-receipt p {
+  margin: 0 0 12px;
+}
+
+.anchor-receipt .tag {
+  margin-bottom: 12px;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 960px) {
@@ -1329,5 +1451,22 @@ a.box:hover {
 
   .table .hide-sm {
     display: none;
+  }
+
+  .row-actions {
+    white-space: normal;
+  }
+
+  .row-actions .text-link {
+    display: flex;
+    margin: 6px 0 0 auto;
+  }
+
+  .row-actions .text-link + .text-link {
+    margin-left: auto;
+  }
+
+  .side-card {
+    padding: 20px;
   }
 }
