@@ -1,0 +1,36 @@
+# Render Blueprint: the Paperstall web app and its server, on one free web service.
+# Product details, uploads, sign-in challenges and rate limits live in Postgres
+# (DATABASE_URL, e.g. a free Neon database), because a free instance's disk is
+# wiped whenever it restarts or sleeps. Prices, splits and sales live on chain.
+# Keys are Stellar testnet secrets; set them in the Render dashboard, never in the repo.
+services:
+  - type: web
+    name: paperstall
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: app
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/config
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        value: "1"
+      # Uploads are kept in Postgres on the hosted demo, so keep them small.
+      - key: MAX_FILE_MB
+        value: "20"
+      # The site's own URL, e.g. https://paperstall.onrender.com. Passkeys are bound to it.
+      - key: PUBLIC_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      # Pays network fees for passkey wallets and fee-bumps Stellar wallet purchases.
+      - key: SPONSOR_SECRET
+        sync: false
+      # Testnet only: holds test USDC for the "Get 10 test USDC" button.
+      - key: FAUCET_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
