@@ -16,6 +16,11 @@
 //
 // Needs the stellar CLI. Creates or tops up testnet identities cs-sponsor,
 // cs-faucet and cs-affiliate, and a fresh co-creator each run.
+//
+// APP_URL=https://paperstall.onrender.com runs the same checks against a
+// deployed site instead of starting one (its own faucet must hold test USDC).
+// There the listing is named as a test and paused at the end, so it leaves
+// the public shelf.
 
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
@@ -27,7 +32,9 @@ import { STORE_ID, USDC_ID } from "../src/config";
 const NATIVE_XLM_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 const USDC_ASSET = "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
 const ONE = 10_000_000n;
-const APP = "http://localhost:5173"; // WebAuthn needs a domain, not an IP
+const HOSTED = !!process.env.APP_URL;
+const APP = (process.env.APP_URL ?? "http://localhost:5173").replace(/\/$/, ""); // WebAuthn needs a domain, not an IP
+const TITLE = `${HOSTED ? "Test run: " : ""}Lagos Nights beat pack`;
 const DATA_DIR = ".data-test";
 const LONG = 180_000;
 const PNG_1PX = Buffer.from(
@@ -164,27 +171,34 @@ async function xlmOf(account: string): Promise<string> {
 
 async function main() {
   console.log("== setup");
-  for (const port of [5173, 8790]) {
-    if (!(await portFree(port))) throw new Error(`port ${port} is in use; stop the dev server or server first`);
+  if (!HOSTED) {
+    for (const port of [5173, 8790]) {
+      if (!(await portFree(port))) throw new Error(`port ${port} is in use; stop the dev server or server first`);
+    }
   }
   for (const name of ["cs-sponsor", "cs-faucet", "cs-affiliate"]) ensureKey(name);
-  ensureUsdc("cs-faucet", 30n * ONE);
+  if (!HOSTED) ensureUsdc("cs-faucet", 30n * ONE);
   ensureUsdc("cs-affiliate", 0n);
   // A co-creator whose account exists but can't hold USDC yet.
   const coName = `cs-co-${Date.now()}`;
   cli("keys", "generate", coName, "--network", "testnet", "--fund");
   const coCreator = addr(coName);
 
-  rmSync(DATA_DIR, { recursive: true, force: true });
-  start("pnpm", ["api"], {
-    SPONSOR_SECRET: cli("keys", "show", "cs-sponsor"),
-    FAUCET_SECRET: cli("keys", "show", "cs-faucet"),
-    SESSION_SECRET: randomBytes(32).toString("hex"),
-    DATA_DIR,
-  });
-  start("pnpm", ["dev"]);
-  await waitFor(`${APP}/api/config`);
-  await waitFor(APP);
+  if (HOSTED) {
+    // A free host may be asleep; the first request wakes it.
+    await waitFor(`${APP}/api/config`, 180);
+  } else {
+    rmSync(DATA_DIR, { recursive: true, force: true });
+    start("pnpm", ["api"], {
+      SPONSOR_SECRET: cli("keys", "show", "cs-sponsor"),
+      FAUCET_SECRET: cli("keys", "show", "cs-faucet"),
+      SESSION_SECRET: randomBytes(32).toString("hex"),
+      DATA_DIR,
+    });
+    start("pnpm", ["dev"]);
+    await waitFor(`${APP}/api/config`);
+    await waitFor(APP);
+  }
 
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
   openBrowser = browser;
@@ -201,7 +215,7 @@ async function main() {
   const creator = (await creatorPage.getByTestId("wallet").getAttribute("title"))!;
   console.log(`creator wallet ${creator}`);
 
-  await creatorPage.locator("input[name=title]").fill("Lagos Nights beat pack");
+  await creatorPage.locator("input[name=title]").fill(TITLE);
   await creatorPage.locator("textarea[name=description]").fill("Ten afrobeats instrumentals, WAV and stems.");
   await creatorPage.locator("input[name=file]").setInputFiles({ name: "lagos-nights.zip", mimeType: "application/zip", buffer: fileBytes });
   await creatorPage.locator("input[name=cover]").setInputFiles({ name: "cover.png", mimeType: "image/png", buffer: PNG_1PX });
@@ -309,6 +323,8 @@ async function main() {
   await c2.locator(".pill", { hasText: "Paused" }).waitFor({ timeout: LONG }).catch(() => failWith(c2, "pause failed"));
   const paused = await (await c2.request.get(`${APP}/api/products/${productId}`)).json();
   check(paused.active === false, "the creator paused sales on chain");
+  const shelf = (await (await c2.request.get(`${APP}/api/products`)).json()) as { id: number }[];
+  check(!shelf.some((p) => String(p.id) === productId), "a paused product leaves the public shelf");
   await c2.getByTestId(`toggle-${productId}`).click();
   await c2.locator(".pill", { hasText: "Paused" }).waitFor({ state: "detached", timeout: LONG }).catch(() => failWith(c2, "resume failed"));
 
@@ -344,6 +360,12 @@ async function main() {
   check(balance(USDC_ID, gKey.publicKey()) === 7n * ONE, "Stellar wallet buyer has 7 of the 10 test USDC left");
   check(read(STORE_ID, "owed", "--to", coCreator) === "0", "nothing is left held in the contract");
   check(balance(NATIVE_XLM_ID, creator) === 0n && balance(NATIVE_XLM_ID, buyer) === 0n, "neither passkey wallet holds XLM: every fee was sponsored");
+
+  if (HOSTED) {
+    // Take the test listing off the live shelf.
+    await c2.getByTestId(`toggle-${productId}`).click();
+    await c2.locator(".pill", { hasText: "Paused" }).waitFor({ timeout: LONG }).catch(() => failWith(c2, "final pause failed"));
+  }
 
   console.log(failures ? `\n${failures} of ${checks} checks failed` : `\nall ${checks} checks passed`);
   process.exitCode = failures ? 1 : 0;

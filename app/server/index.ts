@@ -310,7 +310,8 @@ app.get("/api/creators/:id", async (c) => {
   const profile = byAddress ? await db.profile(id) : await db.profileByHandle(id.toLowerCase().replace(/^@/, ""));
   const wallet = profile?.wallet ?? (byAddress ? id : null);
   if (!wallet) return c.json({ error: "no such shop" }, 404);
-  const products = await withChain(await db.productsBy(wallet));
+  // Paused products stay in the creator's dashboard but leave the shop window.
+  const products = (await withChain(await db.productsBy(wallet))).filter((p) => p.active);
   return c.json({ wallet, profile: profile ? { name: profile.name, bio: profile.bio, handle: profile.handle } : null, products });
 });
 
@@ -398,8 +399,9 @@ app.get("/api/sales", async (c) => {
 
 app.get("/api/products", async (c) => {
   const creator = c.req.query("creator");
-  const rows = creator ? await db.productsBy(creator) : await db.latest(24);
-  return c.json(await withChain(rows));
+  // The creator's own list (dashboard) includes paused products; the public shelf doesn't.
+  if (creator) return c.json(await withChain(await db.productsBy(creator)));
+  return c.json((await withChain(await db.latest(48))).filter((p) => p.active).slice(0, 24));
 });
 
 app.get("/api/products/:id", async (c) => {
