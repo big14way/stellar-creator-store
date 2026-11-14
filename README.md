@@ -4,7 +4,7 @@
 
 Built for the Stellar Buildathon for Builder's Circle members in Nigeria and Ghana.
 
-> Status: the split contract is built, unit-tested and running on testnet with Circle's testnet USDC. The web app is next.
+> Status: the split contract and passkey checkout both work on testnet with Circle's testnet USDC. Product pages and downloads are next.
 
 ## The problem
 
@@ -70,12 +70,36 @@ Last run, 14 Nov 2026: Circle's testnet USDC, 5% platform fee, a 10 USDC product
 - Sale: [`972038f5…a0e7`](https://stellar.expert/explorer/testnet/tx/972038f5914edad8c8ac96eb2cae80e7eb7ade599af8734ded4a24983143a0e7)
 - Claim: [`d40f1241…2105`](https://stellar.expert/explorer/testnet/tx/d40f124171bc41492c0f176e92ae6767be3ee0a43fb6f6ea87adc297d5d92105)
 
+## Passkey checkout
+
+[`app/`](app) is the web app (Vite, React, TypeScript), built on Stellar's [smart-account-kit](https://github.com/stellar/smart-account-kit) and OpenZeppelin smart accounts.
+
+- A buyer creates a wallet with a passkey (fingerprint or face). No seed phrase and no browser extension.
+- They pay in USDC only. The wallet never needs XLM: our relayer ([`app/server/relayer.ts`](app/server/relayer.ts)) wraps each signed call in a transaction and pays the network fee.
+- The relayer pays for two things only: deploying a wallet from the approved wallet code, and `buy` on our store by a smart wallet. It refuses anything the sponsor would authorize just by paying the fee, and caps the fee per transaction ([rules](app/server/policy.ts), [tests](app/tests/policy.test.ts)).
+
+### Run it
+
+```sh
+cd app
+pnpm install
+pnpm test            # relayer rules
+pnpm test:passkey    # a full purchase on testnet in a headless browser
+```
+
+`test:passkey` starts the relayer and the app, opens Chromium with a virtual passkey, creates a wallet, sends it 6 USDC, buys a 5 USDC product and checks the chain. It uses the testnet identities from `scripts/testnet-e2e.sh`. Last run, 14 Nov 2026:
+
+- Wallet `CDXSP7VS…T4ZS` paid 5 USDC and holds no XLM
+- Sale [`42dab5aa…747f`](https://stellar.expert/explorer/testnet/tx/42dab5aa6df11938d8db93ad9b0bcdaa947a766fc357c620e2cee0a02019747f): fee of 0.04 XLM paid by our sponsor; the creator received 4.75 USDC
+
+To try it with your own fingerprint or face: run `SPONSOR_SECRET=$(stellar keys show cs-sponsor) pnpm relayer` and `pnpm dev`, then open http://localhost:5173.
+
 ## Build week plan
 
 | Day | Goal |
 |---|---|
 | 1 | Split contract and its tests on testnet (done) |
-| 2 | Product listing and passkey sign-in |
+| 2 | Product listing and passkey sign-in (passkey wallet and sponsored fees done) |
 | 3 | USDC checkout; the download unlocks from the sale record |
 | 4 | Affiliate links and co-creator shares |
 | 5 | Creator dashboard: sales, balance, cash-out |
