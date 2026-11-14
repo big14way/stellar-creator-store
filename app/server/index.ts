@@ -38,6 +38,12 @@ const ORIGINS = (process.env.PUBLIC_URL ?? "http://localhost:5173,http://localho
   .map((o) => o.trim().replace(/\/$/, ""))
   .filter(Boolean);
 const RP_IDS = [...new Set(ORIGINS.map((o) => new URL(o).hostname))];
+// Moderation: listings the operator took off the shelf and shop pages. The
+// contract can't be overruled, so sales and existing buyers' downloads still work.
+const HIDDEN = new Set(
+  (process.env.HIDDEN_PRODUCTS ?? "").split(",").filter((s) => s.trim()).map(Number).filter(Number.isSafeInteger),
+);
+const onShelf = (p: { id: number; active: boolean }) => p.active && !HIDDEN.has(p.id);
 
 function required(name: string): string {
   const value = process.env[name];
@@ -311,7 +317,7 @@ app.get("/api/creators/:id", async (c) => {
   const wallet = profile?.wallet ?? (byAddress ? id : null);
   if (!wallet) return c.json({ error: "no such shop" }, 404);
   // Paused products stay in the creator's dashboard but leave the shop window.
-  const products = (await withChain(await db.productsBy(wallet))).filter((p) => p.active);
+  const products = (await withChain(await db.productsBy(wallet))).filter(onShelf);
   return c.json({ wallet, profile: profile ? { name: profile.name, bio: profile.bio, handle: profile.handle } : null, products });
 });
 
@@ -401,7 +407,7 @@ app.get("/api/products", async (c) => {
   const creator = c.req.query("creator");
   // The creator's own list (dashboard) includes paused products; the public shelf doesn't.
   if (creator) return c.json(await withChain(await db.productsBy(creator)));
-  return c.json((await withChain(await db.latest(48))).filter((p) => p.active).slice(0, 24));
+  return c.json((await withChain(await db.latest(48))).filter(onShelf).slice(0, 24));
 });
 
 app.get("/api/products/:id", async (c) => {

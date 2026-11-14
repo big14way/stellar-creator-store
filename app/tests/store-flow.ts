@@ -337,6 +337,11 @@ async function main() {
   await stranger.getByTestId("shop-name").waitFor();
   check((await stranger.getByTestId("shop-name").textContent()) === "Ada's Beat Lab", "the shop page shows the creator's name");
   check((await stranger.getByText("Lagos Nights beat pack").count()) > 0, "the shop page lists the product");
+  if (HOSTED) {
+    // Take the test listing off the live shelf (sales and downloads keep working).
+    await c2.getByTestId(`toggle-${productId}`).click();
+    await c2.locator(".pill", { hasText: "Paused" }).waitFor({ timeout: LONG }).catch(() => failWith(c2, "final pause failed"));
+  }
 
   console.log("== buyer 1's library on another device");
   const buyer2 = await sameOnAnotherDevice(browser, buyerP, "buyer-device-2");
@@ -360,12 +365,6 @@ async function main() {
   check(balance(USDC_ID, gKey.publicKey()) === 7n * ONE, "Stellar wallet buyer has 7 of the 10 test USDC left");
   check(read(STORE_ID, "owed", "--to", coCreator) === "0", "nothing is left held in the contract");
   check(balance(NATIVE_XLM_ID, creator) === 0n && balance(NATIVE_XLM_ID, buyer) === 0n, "neither passkey wallet holds XLM: every fee was sponsored");
-
-  if (HOSTED) {
-    // Take the test listing off the live shelf.
-    await c2.getByTestId(`toggle-${productId}`).click();
-    await c2.locator(".pill", { hasText: "Paused" }).waitFor({ timeout: LONG }).catch(() => failWith(c2, "final pause failed"));
-  }
 
   console.log(failures ? `\n${failures} of ${checks} checks failed` : `\nall ${checks} checks passed`);
   process.exitCode = failures ? 1 : 0;

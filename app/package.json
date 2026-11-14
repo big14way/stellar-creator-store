@@ -10,7 +10,8 @@
     "start": "NODE_ENV=production tsx server/index.ts",
     "test:e2e": "tsx tests/store-flow.ts",
     "api": "tsx server/index.ts",
-    "test:cashout": "tsx tests/cashout.ts"
+    "test:cashout": "tsx tests/cashout.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@creit.tech/stellar-wallets-kit": "2.8.0",

@@ -34,3 +34,6 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      # Optional moderation: product ids to keep off the shelf and shop pages.
+      - key: HIDDEN_PRODUCTS
+        sync: false

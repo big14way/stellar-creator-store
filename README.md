@@ -4,11 +4,13 @@
 
 A creator store for Nigeria and Ghana, built for the Stellar Buildathon (Builder's Circle). Creators list templates, ebooks, courses and beat packs; buyers pay in USDC with a passkey or any Stellar wallet; a Soroban contract pays the creator, co-creators, the affiliate and the platform in the same transaction; creators keep dollars or cash out through a Stellar anchor.
 
+> **Live demo (testnet): https://paperstall.onrender.com** · [demo shop](https://paperstall.onrender.com/c/demo)
+>
 > **Status:** works end to end on Stellar testnet with Circle's testnet USDC: listing, two ways to pay, downloads, affiliates, co-creator splits, sign-in on any device, creator shops and cash-out through the SDF test anchor. Mainnet needs a funded fee sponsor and a deployed store contract (see [Mainnet](#mainnet)).
 
 ## Try it
 
-Run it locally (below). Then, in about two minutes:
+Open **https://paperstall.onrender.com** (free hosting: after a quiet spell the first visit takes up to a minute to wake the server). The [demo shop](https://paperstall.onrender.com/c/demo) has three real products made for it (a drum sample pack, an invoice template and a checklist, all CC0) to buy with test USDC. Or run it locally (below). Then, in about two minutes:
 
 1. **Sell:** open `/sell`, create a wallet with your fingerprint or face, upload any file, set a price and a co-creator, and sign the listing.
 2. **Buy:** open the product in another browser profile. Either make a passkey wallet and press **Get 10 test USDC**, or press **Pay with a Stellar wallet** and use Freighter, LOBSTR, xBull or Albedo on testnet. Pay, and download.
@@ -142,6 +144,8 @@ Challenges are single use and expire in 5 minutes. Proven wallets go in a signed
 
 **Finding a wallet on a new device.** smart-account-kit looks a passkey up in an indexer, then checks the wallet's creation transaction on chain itself. The public indexer can take a long time to record a new wallet's creation, so a creator who had just made one couldn't sign in on their phone. Our server records the creation of every wallet it sponsors and answers lookups in the indexer's format, passing anything else to the public indexer. The kit trusts none of it without checking the chain.
 
+**Moderation.** The contract lets only a product's creator change or pause it, and nobody can stop a sale made on chain. The operator can still take a listing off Paperstall's own shelf and shop pages (`HIDDEN_PRODUCTS`, a list of product ids); people who bought it keep their downloads.
+
 **Known limits.** The smart-account code and smart-account-kit are new and not yet audited. Receipts are kept on chain for 30 days after each sale and then archived; the server's own purchase record then stands in until the entry is restored.
 
 ## Cash-out, honestly
@@ -189,6 +193,8 @@ Then open http://localhost:5173. The sponsor needs testnet XLM (`stellar keys fu
 4. The creator signs in on a second device with the same passkey, sees both sales, pays out the co-creator's held share once they add a trustline, pauses and resumes the product, and names their shop.
 5. The first buyer signs in on another device and downloads from their library.
 
+`APP_URL=https://paperstall.onrender.com pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 14 Nov 2026 all 27 checks passed against the live site.
+
 It checks:
 
 - the bytes match the upload
@@ -201,6 +207,8 @@ It checks:
 ### Deploy
 
 [`render.yaml`](render.yaml) is a Render blueprint for one free web service. Give it a Postgres `DATABASE_URL` (a free Neon database works), `PUBLIC_URL`, and testnet `SPONSOR_SECRET` and `FAUCET_SECRET`.
+
+The live demo runs exactly this: a free Render web service and a free Neon Postgres database, both in Frankfurt, deployed on every push to `main`. Its sponsor and faucet are testnet accounts of their own; the faucet holds test USDC bought on the testnet DEX. `APP_URL=… pnpm seed:demo` stocks a new site's demo shop through the site itself (a virtual passkey lists the products, then a buyer pays with faucet USDC and the download is checked).
 
 ### Mainnet
 
