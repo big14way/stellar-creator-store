@@ -1,0 +1,17 @@
+[package]
+name = "creator-store"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Lists digital products and splits each USDC sale between creator, co-creators, affiliate and platform in one transaction"
+license = "MIT"
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
