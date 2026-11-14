@@ -22,6 +22,14 @@ export function decode(body: unknown): Decoded | string {
   }
 }
 
+/** Store functions we pay fees for, and which argument must be a smart wallet. */
+const STORE_CALLS: Record<string, { walletArg?: number; needsAuth: boolean }> = {
+  buy: { walletArg: 0, needsAuth: true }, // buyer
+  create_product: { walletArg: 0, needsAuth: true }, // creator
+  update_product: { needsAuth: true }, // the contract checks it is the creator
+  claim: { walletArg: 0, needsAuth: false }, // pays only `to`; no signature needed
+};
+
 /** Why this call will not be sponsored, or null if it will. */
 export function refusal(
   { func, auth }: Decoded,
@@ -29,7 +37,6 @@ export function refusal(
   store = STORE_ID,
   walletWasmHash = ACCOUNT_WASM_HASH,
 ): string | null {
-  if (auth.length === 0) return "no authorization entries";
   for (const entry of auth) {
     const signer = addressSigner(entry);
     if (!signer) return "only signed address authorization is sponsored";
@@ -41,12 +48,18 @@ export function refusal(
       const call = func.invokeContract();
       const contract = Address.fromScAddress(call.contractAddress()).toString();
       const fn = call.functionName().toString();
-      if (contract !== store || fn !== "buy") return `only ${store}.buy is sponsored`;
-      const buyer = Address.fromScVal(call.args()[0]).toString();
-      if (!buyer.startsWith("C")) return "only smart-wallet buyers are sponsored";
+      const rule = contract === store ? STORE_CALLS[fn] : undefined;
+      if (!rule) return `only ${Object.keys(STORE_CALLS).join(", ")} on ${store} are sponsored`;
+      if (rule.needsAuth && auth.length === 0) return "no authorization entries";
+      if (rule.walletArg !== undefined) {
+        const arg = call.args()[rule.walletArg];
+        const wallet = arg ? Address.fromScVal(arg).toString() : "";
+        if (!wallet.startsWith("C")) return "only smart wallets are sponsored";
+      }
       return null;
     }
     case xdr.HostFunctionType.hostFunctionTypeCreateContractV2(): {
+      if (auth.length === 0) return "no authorization entries";
       const exec = func.createContractV2().executable();
       if (exec.switch() !== xdr.ContractExecutableType.contractExecutableWasm()) {
         return "only wallet code can be deployed";
@@ -57,6 +70,18 @@ export function refusal(
     default:
       return "unsupported host function";
   }
+}
+
+/** Smart wallets that signed these entries. A successful transaction proves the submitter holds their passkeys. */
+export function walletSigners(auth: xdr.SorobanAuthorizationEntry[]): string[] {
+  return auth.map(addressSigner).filter((a): a is string => !!a && a.startsWith("C"));
+}
+
+/** The store function and its decoded wallet argument, for bookkeeping after success. */
+export function storeCall(func: xdr.HostFunction): { fn: string; args: xdr.ScVal[] } | null {
+  if (func.switch() !== xdr.HostFunctionType.hostFunctionTypeInvokeContract()) return null;
+  const call = func.invokeContract();
+  return { fn: call.functionName().toString(), args: call.args() };
 }
 
 /**

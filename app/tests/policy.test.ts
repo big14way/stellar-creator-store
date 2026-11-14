@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Address, Keypair, StrKey, nativeToScVal, xdr } from "@stellar/stellar-sdk";
-import { decode, refusal, type Decoded } from "../server/policy";
+import { decode, refusal, walletSigners, type Decoded } from "../server/policy";
 
 const STORE = StrKey.encodeContract(Buffer.alloc(32, 1));
 const OTHER = StrKey.encodeContract(Buffer.alloc(32, 2));
@@ -89,14 +89,39 @@ test("sponsors deploying a wallet from the approved code only", () => {
   assert.match(check({ func: asset, auth: [signedBy(PERSON)] })!, /wallet code/);
 });
 
+test("sponsors creators listing, editing and claiming from a smart wallet", () => {
+  const list = invoke(STORE, "create_product", [Address.fromString(WALLET).toScVal(), nativeToScVal(5n, { type: "i128" })]);
+  assert.equal(check({ func: list, auth: [signedBy(WALLET)] }), null);
+
+  const edit = invoke(STORE, "update_product", [nativeToScVal(1n, { type: "u64" })]);
+  assert.equal(check({ func: edit, auth: [signedBy(WALLET)] }), null);
+  assert.match(check({ func: edit, auth: [] })!, /no authorization/);
+
+  // claim pays only the named wallet, so it needs no signature
+  const claim = invoke(STORE, "claim", [Address.fromString(WALLET).toScVal()]);
+  assert.equal(check({ func: claim, auth: [] }), null);
+});
+
+test("refuses listing or claiming for a plain account", () => {
+  const list = invoke(STORE, "create_product", [Address.fromString(PERSON).toScVal(), nativeToScVal(5n, { type: "i128" })]);
+  assert.match(check({ func: list, auth: [signedBy(PERSON)] })!, /smart wallets/);
+  const claim = invoke(STORE, "claim", [Address.fromString(SPONSOR).toScVal()]);
+  assert.match(check({ func: claim, auth: [] })!, /smart wallets/);
+});
+
 test("refuses any other contract or function", () => {
-  assert.match(check({ func: buy(WALLET, OTHER), auth: [signedBy(WALLET)] })!, /only .*\.buy/);
-  assert.match(check({ func: buy(WALLET, STORE, "create_product"), auth: [signedBy(WALLET)] })!, /only .*\.buy/);
+  assert.match(check({ func: buy(WALLET, OTHER), auth: [signedBy(WALLET)] })!, /only buy, create_product/);
+  assert.match(check({ func: buy(WALLET, STORE, "set_fee"), auth: [signedBy(WALLET)] })!, /only buy, create_product/);
+  assert.match(check({ func: buy(WALLET, STORE, "upgrade"), auth: [signedBy(WALLET)] })!, /only buy, create_product/);
+});
+
+test("lists the smart wallets that signed", () => {
+  assert.deepEqual(walletSigners([signedBy(WALLET), signedBy(PERSON, true)]), [WALLET]);
 });
 
 test("refuses a buyer that is a plain account, so the sponsor can never be the buyer", () => {
-  assert.match(check({ func: buy(PERSON), auth: [signedBy(PERSON)] })!, /smart-wallet/);
-  assert.match(check({ func: buy(SPONSOR), auth: [signedBy(WALLET)] })!, /smart-wallet/);
+  assert.match(check({ func: buy(PERSON), auth: [signedBy(PERSON)] })!, /smart wallets/);
+  assert.match(check({ func: buy(SPONSOR), auth: [signedBy(WALLET)] })!, /smart wallets/);
 });
 
 test("refuses authorization the sponsor would grant just by paying the fee", () => {

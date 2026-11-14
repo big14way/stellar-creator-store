@@ -1,0 +1,31 @@
+/* Placeholder styles; the design pass replaces these. */
+:root { font-family: system-ui, sans-serif; color: #111; background: #fff; }
+body { margin: 0; }
+.site-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #eee; }
+.site-header nav { display: flex; gap: 16px; align-items: center; }
+.brand { font-weight: 700; text-decoration: none; color: inherit; }
+.page { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+.narrow { max-width: 560px; }
+.site-footer { text-align: center; color: #777; font-size: 13px; padding: 32px 16px; }
+.button { display: inline-block; padding: 10px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; text-decoration: none; color: inherit; font: inherit; }
+.button.primary { background: #111; color: #fff; border-color: #111; }
+.button:disabled { opacity: 0.5; }
+.link-button { background: none; border: none; color: #0057d9; cursor: pointer; font: inherit; padding: 0; }
+.muted { color: #666; } .hint { color: #666; font-size: 13px; display: block; } .error { color: #b00020; }
+.form { display: grid; gap: 16px; } .form label { display: grid; gap: 6px; }
+.form input, .form textarea { font: inherit; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+.row { display: flex; gap: 8px; align-items: center; } .pct { width: 64px; }
+.split { background: #f6f6f6; border-radius: 8px; padding: 12px; display: grid; gap: 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.card { border: 1px solid #eee; border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit; }
+.card img, .cover-placeholder { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eee; display: grid; place-items: center; font-size: 40px; }
+.card-body { display: flex; justify-content: space-between; padding: 10px 12px; }
+.product { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+.product-media img { width: 100%; border-radius: 12px; }
+.price { font-size: 28px; font-weight: 700; }
+.topup, .affiliate, .owned { margin-top: 16px; padding: 12px; border: 1px solid #eee; border-radius: 8px; display: grid; gap: 8px; }
+.address, code { word-break: break-all; font-size: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.stat { border: 1px solid #eee; border-radius: 10px; padding: 16px; display: grid; gap: 4px; } .stat strong { font-size: 24px; }
+.table { width: 100%; border-collapse: collapse; } .table th, .table td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; }
+@media (max-width: 720px) { .product { grid-template-columns: 1fr; } }

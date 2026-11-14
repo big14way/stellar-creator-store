@@ -4,11 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host localhost --port 5173 --strictPort",
-    "relayer": "tsx server/relayer.ts",
     "build": "tsc -p . && vite build",
     "typecheck": "tsc -p .",
-    "test:passkey": "tsx tests/passkey-buy.ts",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "test:e2e": "tsx tests/store-flow.ts",
+    "api": "tsx server/index.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",
@@ -17,7 +18,8 @@
     "hono": "^4.13.18",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "smart-account-kit": "0.10.0"
+    "smart-account-kit": "0.10.0",
+    "wouter": "^3.13.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

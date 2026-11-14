@@ -1,81 +1,52 @@
-import { useState } from "react";
-import { getKit, buildBuy } from "./wallet";
+import { Link, Route, Switch } from "wouter";
+import { Dashboard } from "./pages/Dashboard";
+import { Home } from "./pages/Home";
+import { ProductPage } from "./pages/Product";
+import { Sell } from "./pages/Sell";
+import { short, useWallet, WalletProvider } from "./useWallet";
 
-// First slice of the app: create a passkey wallet, then buy a product from the
-// store contract with it. The relayer pays the network fee.
-
-type Status = { kind: "idle" } | { kind: "busy"; what: string } | { kind: "ok"; text: string } | { kind: "error"; text: string };
+function Header() {
+  const { wallet, restoring, signIn } = useWallet();
+  return (
+    <header className="site-header">
+      <Link href="/" className="brand">
+        Creator Store
+      </Link>
+      <nav>
+        <Link href="/sell">Sell</Link>
+        <Link href="/dashboard">Dashboard</Link>
+        {restoring ? null : wallet ? (
+          <span className="wallet-chip" title={wallet} data-testid="wallet">
+            {short(wallet)}
+          </span>
+        ) : (
+          <button className="link-button" onClick={() => signIn().catch(() => {})}>
+            Sign in
+          </button>
+        )}
+      </nav>
+    </header>
+  );
+}
 
 export function App() {
-  const [wallet, setWallet] = useState<string | null>(null);
-  const [productId, setProductId] = useState("1");
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const [saleHash, setSaleHash] = useState<string | null>(null);
-
-  async function createWallet() {
-    setStatus({ kind: "busy", what: "Creating your wallet…" });
-    try {
-      const kit = getKit();
-      const { contractId } = await kit.createWallet("Creator Store", "buyer", { autoSubmit: true });
-      setWallet(contractId);
-      setStatus({ kind: "ok", text: "Wallet ready" });
-    } catch (err) {
-      setStatus({ kind: "error", text: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  async function buy() {
-    if (!wallet) return;
-    setStatus({ kind: "busy", what: "Paying…" });
-    try {
-      const tx = await buildBuy(wallet, BigInt(productId));
-      const result = await getKit().signAndSubmit(tx);
-      if (!result.success) {
-        setStatus({ kind: "error", text: `${result.error.code}: ${result.error.message}` });
-        return;
-      }
-      setSaleHash(result.hash ?? null);
-      setStatus({ kind: "ok", text: "Paid" });
-    } catch (err) {
-      setStatus({ kind: "error", text: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  const busy = status.kind === "busy";
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", maxWidth: 560, margin: "48px auto", padding: "0 16px" }}>
-      <h1>Creator Store</h1>
-      <p>Pay with a passkey wallet. No seed phrase, no XLM needed.</p>
-
-      <section>
-        <button onClick={createWallet} disabled={busy || !!wallet}>
-          Create wallet with a passkey
-        </button>
-        {wallet && (
-          <p>
-            Wallet: <code data-testid="wallet">{wallet}</code>
-          </p>
-        )}
-      </section>
-
-      <section style={{ marginTop: 24 }}>
-        <label>
-          Product{" "}
-          <input data-testid="product" value={productId} onChange={(e) => setProductId(e.target.value)} size={6} />
-        </label>{" "}
-        <button data-testid="buy" onClick={buy} disabled={busy || !wallet}>
-          Buy
-        </button>
-      </section>
-
-      <p data-testid="status" data-kind={status.kind} style={{ marginTop: 24 }}>
-        {status.kind === "busy" ? status.what : status.kind === "idle" ? "" : status.text}
-      </p>
-      {saleHash && (
-        <p>
-          Sale: <code data-testid="sale">{saleHash}</code>
-        </p>
-      )}
-    </main>
+    <WalletProvider>
+      <Header />
+      <main className="page">
+        <Switch>
+          <Route path="/" component={Home} />
+          <Route path="/sell" component={Sell} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/p/:id">{(params) => <ProductPage id={params.id} />}</Route>
+          <Route>
+            <p>Page not found.</p>
+          </Route>
+        </Switch>
+      </main>
+      <footer className="site-footer">
+        Payments settle in USDC on Stellar testnet. Each sale is split by a smart contract the moment it happens.
+      </footer>
+    </WalletProvider>
   );
 }
