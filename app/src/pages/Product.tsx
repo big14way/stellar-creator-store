@@ -2,7 +2,7 @@ import { Copy, Download, Fingerprint, ShoppingBag, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { api, fileSize, shopPath, type Access, type Config, type Product } from "../api";
-import { formatUsdc, usdcBalance } from "../chain";
+import { formatUsdc, formatUsdcUp, usdcBalance } from "../chain";
 import { accountState, addUsdc, buyWithStellar, friendbot, type AccountState } from "../stellarWallet";
 import { explorerTx, Eyebrow, fileKind, Local, ProductBox, RatesCredit, Receipt, Spec, Status, TagButton } from "../ui";
 import { short, useWallet } from "../useWallet";
@@ -23,20 +23,29 @@ export function ProductPage({ id }: { id: string }) {
   const [copied, setCopied] = useState<string | null>(null);
 
   const ref = new URLSearchParams(window.location.search).get("ref");
-  const affiliate = isAddress(ref) ? ref : undefined;
 
   useEffect(() => {
     setProduct(null);
+    setNotFound(false);
     api
       .product(id)
       .then(setProduct)
       .catch(() => setNotFound(true));
-    api
-      .access(id)
-      .then(setAccess)
-      .catch(() => {});
     api.config().then(setConfig).catch(() => {});
   }, [id]);
+
+  // Whether this browser already owns it: again whenever a wallet signs in or changes.
+  useEffect(() => {
+    let current = true;
+    setAccess(null);
+    api
+      .access(id)
+      .then((a) => current && setAccess(a))
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [id, wallet, stellar]);
 
   const refreshBalance = useCallback(async (w: string) => {
     const b = await usdcBalance(w).catch(() => 0n);
@@ -82,6 +91,11 @@ export function ProductPage({ id }: { id: string }) {
   }
 
   const price = BigInt(product.price);
+  const productId = BigInt(product.id);
+  const mine = product.creator === wallet || product.creator === stellar;
+  // The contract ignores an affiliate who is the buyer or the creator, so the page does too.
+  const affiliate =
+    isAddress(ref) && product.affiliateBps > 0 && ref !== product.creator && ref !== wallet && ref !== stellar ? ref : undefined;
   const shortOf = wallet && balance !== null && balance < price ? price - balance : null;
   const owned = access?.download ?? null;
   const cut = (bps: number) => (price * BigInt(bps)) / 10_000n;
@@ -104,7 +118,7 @@ export function ProductPage({ id }: { id: string }) {
   async function unlocked() {
     setBusy("Unlocking your download");
     await refreshProven();
-    setAccess(await api.access(id));
+    setAccess(await api.access(product!.id));
     setProduct((p) => (p ? { ...p, sales: p.sales + 1 } : p));
   }
 
@@ -115,14 +129,14 @@ export function ProductPage({ id }: { id: string }) {
       const b = await refreshBalance(w);
       if (b < price) return; // the top-up panel shows what's missing
       setBusy("Confirm with your passkey");
-      await callStore("buy", { buyer: w, product_id: BigInt(id), affiliate });
+      await callStore("buy", { buyer: w, product_id: productId, affiliate });
       await unlocked();
       refreshBalance(w);
     });
 
   const payWithStellar = () =>
     run("Approve the payment in your wallet", async () => {
-      await buyWithStellar(stellar!, BigInt(id), affiliate);
+      await buyWithStellar(stellar!, productId, affiliate);
       await unlocked();
       refreshAccount(stellar!);
     });
@@ -132,7 +146,7 @@ export function ProductPage({ id }: { id: string }) {
   }
 
   const earner = wallet ?? stellar;
-  const shareLink = earner ? `${window.location.origin}/p/${id}?ref=${earner}` : null;
+  const shareLink = earner ? `${window.location.origin}/p/${product.id}?ref=${earner}` : null;
   const downloadUrl = owned ? `${window.location.origin}${owned}` : null;
   const by = product.creatorProfile?.name ?? short(product.creator);
 
@@ -182,7 +196,7 @@ export function ProductPage({ id }: { id: string }) {
       ) : account.usdc < price ? (
         <>
           <p>
-            This wallet has <strong>${formatUsdc(account.usdc)}</strong> USDC. Add ${formatUsdc(price - account.usdc)} to buy
+            This wallet has <strong>${formatUsdc(account.usdc)}</strong> USDC. Add ${formatUsdcUp(price - account.usdc)} to buy
             this.
           </p>
           {testnet && (
@@ -267,6 +281,13 @@ export function ProductPage({ id }: { id: string }) {
                     <Link href="/library">library</Link>: <code data-testid="download-link">{downloadUrl}</code>
                   </p>
                 </Receipt>
+              ) : mine ? (
+                <div className="panel" data-testid="own-product">
+                  <p>
+                    This is your product. Change its price, pause it or see its sales on your{" "}
+                    <Link href="/dashboard">dashboard</Link>.
+                  </p>
+                </div>
               ) : !product.active ? (
                 <div className="panel">
                   <p>The creator has paused sales of this product.</p>
@@ -296,7 +317,7 @@ export function ProductPage({ id }: { id: string }) {
                   {shortOf !== null && (
                     <div className="panel" data-testid="topup">
                       <p>
-                        Your wallet has <strong>${formatUsdc(balance!)}</strong>. Add ${formatUsdc(shortOf)} USDC to buy
+                        Your wallet has <strong>${formatUsdc(balance!)}</strong>. Add ${formatUsdcUp(shortOf)} USDC to buy
                         this. Send USDC on Stellar to:
                       </p>
                       <code className="address">{wallet}</code>
@@ -375,7 +396,7 @@ export function ProductPage({ id }: { id: string }) {
             </p>
           </div>
 
-          {product.affiliateBps > 0 && (
+          {product.affiliateBps > 0 && !mine && (
             <div>
               <Eyebrow>Share and earn</Eyebrow>
               <h3 style={{ fontSize: 34, marginTop: 14 }}>

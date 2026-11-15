@@ -1,5 +1,5 @@
 import { useEffect, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { api, type Product, type Rates, type Sale } from "./api";
 import { formatUsdc } from "./chain";
 import { EXPLORER } from "./config";
@@ -216,5 +216,30 @@ export function Ticker({ sales }: { sales: Sale[] }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** The home page's shelf: navigates home if needed, then scrolls to it (a hash link alone doesn't, with client routing). */
+export function ShelfLink({ className, children }: { className?: string; children: ReactNode }) {
+  const [location, navigate] = useLocation();
+  return (
+    <a
+      href="/#shelf"
+      className={className}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        if (location !== "/") navigate("/");
+        let tries = 0;
+        const scroll = () => {
+          const shelf = document.getElementById("shelf");
+          if (shelf) shelf.scrollIntoView({ behavior: "smooth", block: "start" });
+          else if (tries++ < 30) requestAnimationFrame(scroll);
+        };
+        requestAnimationFrame(scroll);
+      }}
+    >
+      {children}
+    </a>
   );
 }

@@ -54,7 +54,13 @@ let ratesCache: Promise<Rates | null> | null = null;
 let configCache: Promise<Config> | null = null;
 
 export const api = {
-  config: () => (configCache ??= fetch("/api/config").then((r) => json<Config>(r))),
+  config: () =>
+    (configCache ??= fetch("/api/config")
+      .then((r) => json<Config>(r))
+      .catch((err) => {
+        configCache = null; // try again next time rather than remember a failure
+        throw err;
+      })),
   products: (creator?: string) =>
     fetch(creator ? `/api/products?creator=${encodeURIComponent(creator)}` : "/api/products").then((r) => json<Product[]>(r)),
   sales: (creator?: string) =>

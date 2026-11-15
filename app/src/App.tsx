@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { Dashboard } from "./pages/Dashboard";
 import { Home } from "./pages/Home";
@@ -7,11 +7,13 @@ import { ProductPage } from "./pages/Product";
 import { Sell } from "./pages/Sell";
 import { Shop } from "./pages/Shop";
 import { EXPLORER, STORE_ID } from "./config";
-import { Logo } from "./ui";
+import { Logo, ShelfLink } from "./ui";
+import { explain } from "./wallet";
 import { short, useWallet, WalletProvider } from "./useWallet";
 
 function Header() {
   const { wallet, stellar, restoring, signIn } = useWallet();
+  const [signInError, setSignInError] = useState<string | null>(null);
   const shown = wallet ?? stellar;
   return (
     <header className="site-header">
@@ -21,9 +23,7 @@ function Header() {
           Paperstall
         </Link>
         <nav>
-          <Link href="/#shelf" className="secondary">
-            Shop
-          </Link>
+          <ShelfLink className="secondary">Shop</ShelfLink>
           <Link href="/sell">Sell</Link>
           <Link href="/library">Library</Link>
           <Link href="/dashboard" className="secondary">
@@ -35,14 +35,55 @@ function Header() {
               {short(shown)}
             </Link>
           ) : (
-            <button className="chip" onClick={() => signIn().catch(() => {})} data-testid="sign-in">
+            <button
+              className="chip"
+              onClick={() => {
+                setSignInError(null);
+                signIn().catch((err) => setSignInError(explain(err instanceof Error ? err.message : String(err))));
+              }}
+              data-testid="sign-in"
+              title={signInError ?? undefined}
+            >
               Sign in
             </button>
+          )}
+          {signInError && !shown && (
+            <span className="header-error" role="alert">
+              {signInError}
+            </span>
           )}
         </nav>
       </div>
     </header>
   );
+}
+
+/** A crash in one page shows a way back instead of a blank screen. */
+class ErrorBoundary extends Component<{ children: ReactNode }, { failed: string | null }> {
+  state = { failed: null as string | null };
+  static getDerivedStateFromError(err: unknown) {
+    return { failed: err instanceof Error ? err.message : String(err) };
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <section className="band dark">
+        <div className="container">
+          <h1>Something went wrong on this page.</h1>
+          <p className="lead">{this.state.failed}</p>
+          <a href="/" className="text-link">
+            Back to the store
+          </a>
+        </div>
+      </section>
+    );
+  }
+}
+
+/** Resets the error boundary when the route changes. */
+function Pages({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
+  return <ErrorBoundary key={location}>{children}</ErrorBoundary>;
 }
 
 function ScrollToTop() {
@@ -59,6 +100,7 @@ export function App() {
       <ScrollToTop />
       <Header />
       <main>
+        <Pages>
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/sell" component={Sell} />
@@ -77,6 +119,7 @@ export function App() {
             </section>
           </Route>
         </Switch>
+        </Pages>
       </main>
       <footer className="site-footer">
         <div className="container">

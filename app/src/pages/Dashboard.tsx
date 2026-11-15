@@ -1,5 +1,5 @@
 import { ArrowRight, Banknote, Copy, ExternalLink, Fingerprint, Pause, Pencil, Play, Send, Tag } from "lucide-react";
-import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "wouter";
 import { anchorSignIn, sendUsdc, startWithdrawal, STATUS_TEXT, withdrawal, payee, type AnchorTx } from "../anchor";
 import { api, shopPath, type Product, type Profile, type Sale } from "../api";
@@ -21,24 +21,36 @@ export function Dashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Only the latest load may update the page, so a slow answer for a previous wallet is dropped.
+  const loads = useRef(0);
   const load = useCallback(async (w: string) => {
+    const mine = ++loads.current;
     const [ps, ss, b, h] = await Promise.all([
       api.products(w),
       api.sales(w).catch(() => []),
       usdcBalance(w).catch(() => 0n),
       owedTo(w).catch(() => 0n),
     ]);
+    if (mine !== loads.current) return;
     setProducts(ps);
     setSales(ss);
     setBalance(b);
     setHeld(h);
     const coCreators = [...new Set(ps.flatMap((p) => p.shares.map((s) => s.to)))];
     const owed = await Promise.all(coCreators.map((to) => owedTo(to).catch(() => 0n)));
+    if (mine !== loads.current) return;
     setCoHeld(coCreators.map((to, i) => ({ to, amount: owed[i] })).filter((h) => h.amount > 0n));
   }, []);
 
   useEffect(() => {
-    if (wallet) load(wallet).catch((e) => setError(String(e)));
+    // A different wallet: nothing of the previous one's may stay on screen.
+    setProducts(null);
+    setSales([]);
+    setBalance(null);
+    setHeld(0n);
+    setCoHeld([]);
+    setError(null);
+    if (wallet) load(wallet).catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [wallet, load]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
@@ -192,7 +204,7 @@ export function Dashboard() {
             </Link>
           </div>
           {products === null ? (
-            <Status>Loading your products</Status>
+            !error && <Status>Loading your products</Status>
           ) : list.length === 0 ? (
             <div className="empty">
               <p>Nothing on your shelf yet.</p>

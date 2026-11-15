@@ -1473,3 +1473,5 @@ a.box:hover {
 
 /* Keep the creator's own paragraphs and line breaks. */
 .description { white-space: pre-line; }
+
+.header-error { color: #ff9b85; font-size: 12px; max-width: 220px; line-height: 1.3; }

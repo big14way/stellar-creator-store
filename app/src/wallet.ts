@@ -135,6 +135,7 @@ export function explain(message: string): string {
   const store = /Error\(Contract, (#\d+)\)/.exec(message);
   if (store && message.includes(STORE_ID) && CONTRACT_ERRORS[store[1]]) return CONTRACT_ERRORS[store[1]];
   if (/balance|#10\b|insufficient/i.test(message)) return "Not enough USDC in your wallet.";
-  if (/NotAllowedError|cancel|declined|rejected/i.test(message)) return "The request was cancelled.";
+  if (/rejected by the network|TRY_AGAIN_LATER|txBAD_SEQ/i.test(message)) return "The network was busy. Try again in a few seconds.";
+  if (/NotAllowedError|cancel|declined|user rejected|rejected by (the )?user|request rejected/i.test(message)) return "The request was cancelled.";
   return message.length > 200 ? `${message.slice(0, 200)}…` : message;
 }

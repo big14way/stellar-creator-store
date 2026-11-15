@@ -69,6 +69,12 @@ export function formatUsdc(amount: bigint, digits = 2): string {
   return `${negative ? "-" : ""}${rounded / base}${digits > 0 ? `.${frac}` : ""}`;
 }
 
+/** An amount someone must add, rounded up to the cent so it is always enough. */
+export function formatUsdcUp(amount: bigint): string {
+  const cent = 10n ** BigInt(USDC_DECIMALS - 2);
+  return formatUsdc(((amount + cent - 1n) / cent) * cent);
+}
+
 /** "12.5" -> 125_000_000n. Throws on anything that is not a plain positive amount. */
 export function parseUsdc(text: string): bigint {
   const m = /^\s*(\d+)(?:\.(\d{1,7}))?\s*$/.exec(text);

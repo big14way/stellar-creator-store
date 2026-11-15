@@ -54,8 +54,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const create = useCallback(async (label?: string) => {
     const { contractId } = await getKit().createWallet("Paperstall", label || "Paperstall wallet", { autoSubmit: true });
     setWallet(contractId);
+    await refreshProven(); // creating it through the store proves it to the server
     return contractId;
-  }, []);
+  }, [refreshProven]);
 
   const signIn = useCallback(async () => {
     const w = await passkeySignIn();
@@ -69,7 +70,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if ((await refreshProven()).includes(w)) return;
       const signedIn = await passkeySignIn();
       await refreshProven();
-      if (signedIn !== w) throw new Error("That passkey belongs to a different wallet.");
+      if (signedIn !== w) {
+        // The kit is now connected to the passkey's wallet; keep the page in step with it.
+        setWallet(signedIn);
+        throw new Error(`That passkey is for wallet ${short(signedIn)}, which is now signed in. To use ${short(w)}, sign in with its passkey.`);
+      }
     },
     [refreshProven],
   );

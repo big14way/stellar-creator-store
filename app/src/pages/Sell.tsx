@@ -20,10 +20,17 @@ function useStoreFee(): number | null {
   return fee;
 }
 
-const pctToBps = (pct: string) => Math.round(Number(pct || 0) * 100);
+/** "12.5" -> 1250 basis points; null for anything that isn't 0 to 100 with up to 2 decimals. */
+function pctToBps(pct: string): number | null {
+  const t = pct.trim();
+  if (t === "") return 0;
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) return null;
+  const bps = Math.round(Number(t) * 100);
+  return bps <= 10_000 ? bps : null;
+}
 
 export function Sell() {
-  const { wallet, restoring, create, signIn } = useWallet();
+  const { wallet, restoring, create, signIn, ensureProven } = useWallet();
   const [, navigate] = useLocation();
   const feeBps = useStoreFee();
   const [config, setConfig] = useState<Config | null>(null);
@@ -38,15 +45,26 @@ export function Sell() {
   const [step, setStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Prices in whole cents, so what buyers see is exactly what they pay.
   let priceUnits: bigint | null = null;
-  try {
-    priceUnits = parseUsdc(price);
+  if (/^\d+(\.\d{1,2})?$/.test(price.trim())) {
+    priceUnits = parseUsdc(price.trim());
     if (priceUnits <= 0n) priceUnits = null;
-  } catch {
-    priceUnits = null;
   }
-  const coBps = coCreators.reduce((sum, c) => sum + pctToBps(c.pct), 0);
-  const affBps = pctToBps(affiliatePct);
+  const coShares = coCreators.map((c) => ({ to: c.to.trim(), bps: pctToBps(c.pct), pct: c.pct.trim() }));
+  const affShare = pctToBps(affiliatePct);
+  const problem =
+    price.trim() && !priceUnits
+      ? "Enter a price in USDC, like 5 or 4.99."
+      : affShare === null || coShares.some((c) => c.bps === null)
+        ? "Shares are percentages from 0 to 100, like 10 or 12.5."
+        : coShares.some((c) => !c.to && c.pct)
+          ? "Add each co-creator's wallet address, or remove the row."
+          : coShares.some((c) => c.to && !c.bps)
+            ? "Give each co-creator a share above 0%."
+            : null;
+  const coBps = coShares.reduce((sum, c) => sum + (c.to ? (c.bps ?? 0) : 0), 0);
+  const affBps = affShare ?? 0;
   const cut = (bps: number) => (priceUnits ? (priceUnits * BigInt(bps)) / 10_000n : 0n);
   const youGet = priceUnits && feeBps !== null ? priceUnits - cut(feeBps) - cut(coBps) : null;
   const overHundred = feeBps !== null && feeBps + coBps + affBps > 10_000;
@@ -66,15 +84,18 @@ export function Sell() {
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!wallet || !priceUnits) return;
+    if (!wallet || !priceUnits || problem || overHundred) return;
     setError(null);
     const form = new FormData(e.currentTarget);
     form.set("creator", wallet);
     try {
+      // Uploads need this browser to have proven the wallet (it has, if it just made it).
+      setStep("Confirm it's you with your passkey");
+      await ensureProven(wallet);
       setStep("Uploading your file");
       const { draftId } = await api.draft(form);
       setStep("Confirm with your passkey to list it");
-      const shares = coCreators.filter((c) => c.to.trim()).map((c) => ({ to: c.to.trim(), bps: pctToBps(c.pct) }));
+      const shares = coShares.filter((c) => c.to).map((c) => ({ to: c.to, bps: c.bps ?? 0 }));
       const { result } = await callStore("create_product", {
         creator: wallet,
         price: priceUnits,
@@ -183,8 +204,8 @@ export function Sell() {
               </label>
               <label>
                 Cover image
-                <input name="cover" type="file" accept="image/*" />
-                <span className="hint">Optional. Shown on the shelf.</span>
+                <input name="cover" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                <span className="hint">Optional. PNG, JPEG, WebP or GIF, shown on the shelf.</span>
               </label>
             </div>
             <div className="field-row">
@@ -234,10 +255,15 @@ export function Sell() {
             </fieldset>
 
             <div className="actions" style={{ marginTop: 0 }}>
-              <TagButton type="submit" disabled={!!step || !priceUnits || overHundred} icon={<Tag size={16} />}>
+              <TagButton type="submit" disabled={!!step || !priceUnits || overHundred || !!problem} icon={<Tag size={16} />}>
                 List it
               </TagButton>
             </div>
+            {problem && (
+              <p className="error" data-testid="form-problem">
+                {problem}
+              </p>
+            )}
             {step && <Status testId="step">{step}</Status>}
             {error && (
               <p className="error" data-testid="error">

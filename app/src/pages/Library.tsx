@@ -3,13 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { api, fileSize, type LibraryItem } from "../api";
 import { formatUsdc } from "../chain";
-import { explorerTx, Eyebrow, Receipt, Status, TagButton } from "../ui";
+import { explorerTx, Eyebrow, Receipt, ShelfLink, Status, TagButton } from "../ui";
 import { short, useWallet } from "../useWallet";
 import { stellarSignIn } from "../stellarWallet";
 
 /** Everything bought with the wallets this browser has signed in with, on any device. */
 export function Library() {
-  const { restoring, signIn, connectStellar, refreshProven } = useWallet();
+  const { restoring, signIn, signOut, connectStellar, refreshProven } = useWallet();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [wallets, setWallets] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function Library() {
   }, []);
 
   useEffect(() => {
-    if (!restoring) load().catch((e) => setError(String(e)));
+    if (!restoring) load().catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [restoring, load]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
@@ -71,7 +71,15 @@ export function Library() {
           </p>
           {wallets.length > 0 && (
             <p className="hint mono" style={{ marginTop: 18 }}>
-              Signed in as {wallets.map(short).join(", ")}
+              Signed in as {wallets.map(short).join(", ")} ·{" "}
+              <button
+                className="text-link"
+                data-testid="sign-out"
+                disabled={!!busy}
+                onClick={() => run("Signing out", signOut)}
+              >
+                Sign out of this browser
+              </button>
             </p>
           )}
         </div>
@@ -80,15 +88,13 @@ export function Library() {
       <section className="band cream tight">
         <div className="container">
           {items === null ? (
-            <Status>Loading your library</Status>
+            !error && <Status>Loading your library</Status>
           ) : items.length === 0 ? (
             <div className="empty">
               <p>{wallets.length ? "Nothing bought with these wallets yet." : "Sign in to see what you bought."}</p>
               {signInOptions}
               {wallets.length > 0 && (
-                <Link href="/#shelf" className="text-link">
-                  Browse the shelf
-                </Link>
+                <ShelfLink className="text-link">Browse the shelf</ShelfLink>
               )}
             </div>
           ) : (
