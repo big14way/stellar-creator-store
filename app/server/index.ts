@@ -386,6 +386,17 @@ app.patch("/api/products/:id", async (c) => {
 
 // ---- sales (purchases made through this store; each is on chain) ----
 
+// Temporary: shows the proxy's client-IP headers for this request (to be removed).
+app.get("/api/debug/ip", (c) =>
+  c.json({
+    xff: c.req.header("x-forwarded-for") ?? null,
+    cf: c.req.header("cf-connecting-ip") ?? null,
+    trueClient: c.req.header("true-client-ip") ?? null,
+    realIp: c.req.header("x-real-ip") ?? null,
+    remote: getConnInfo(c).remote.address ?? null,
+  }),
+);
+
 app.get("/api/sales", async (c) => {
   const creator = c.req.query("creator");
   const own = isWallet(creator);
