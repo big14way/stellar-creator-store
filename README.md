@@ -204,7 +204,7 @@ Then open http://localhost:5173. The sponsor needs testnet XLM (`stellar keys fu
 4. The creator signs in on a second device with the same passkey, sees both sales, pays out the co-creator's held share once they add a trustline, pauses and resumes the product, and names their shop.
 5. The first buyer signs in on another device and downloads from their library.
 
-`APP_URL=https://paperstall.onrender.com pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 14 Nov 2026 all 27 checks passed against the live site.
+`APP_URL=https://paperstall.onrender.com pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 15 Nov 2026, after the security fixes, all 27 checks passed against the live site.
 
 It checks:
 
