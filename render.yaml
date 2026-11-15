@@ -34,6 +34,10 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      # Render sits behind Cloudflare, which overwrites this header with the
+      # client's IP; rate limits key on it. (X-Forwarded-For can be forged.)
+      - key: CLIENT_IP_HEADER
+        value: cf-connecting-ip
       # Optional moderation: product ids to keep off the shelf and shop pages.
       - key: HIDDEN_PRODUCTS
         sync: false

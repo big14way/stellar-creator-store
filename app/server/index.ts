@@ -28,6 +28,8 @@ const PRODUCTION = process.env.NODE_ENV === "production";
 const MAX_FILE_MB = Number(process.env.MAX_FILE_MB ?? 50);
 const MAX_FILE = MAX_FILE_MB * 1024 * 1024;
 const MAX_COVER = 5 * 1024 * 1024;
+// The request header the host's proxy sets to the client's IP, e.g. cf-connecting-ip on Render.
+const CLIENT_IP_HEADER = process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || null;
 const FAUCET_AMOUNT = 10_0000000n; // 10 USDC
 const HOUR = 60 * 60 * 1000;
 const CHALLENGE_TTL = 5 * 60 * 1000;
@@ -73,11 +75,19 @@ const stellarSignIn = stellarAuth(sessionSecret, new URL(ORIGINS[0]).host);
 
 // ---- helpers ----
 
+/**
+ * The client's IP. Behind a proxy, only a header that proxy overwrites can be
+ * trusted (on Render, Cloudflare's CF-Connecting-IP); X-Forwarded-For keeps
+ * whatever the client sent, so it is never used.
+ */
+function clientIp(c: Context): string {
+  const fromProxy = CLIENT_IP_HEADER ? c.req.header(CLIENT_IP_HEADER)?.trim() : undefined;
+  return fromProxy || getConnInfo(c).remote.address || "unknown";
+}
+
 /** Per client IP (and optionally a key), fixed windows, kept in the database. */
 function allow(c: Context, bucket: string, limit: number, windowMs: number): Promise<boolean> {
-  const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  const ip = forwarded || getConnInfo(c).remote.address || "unknown";
-  return db.allow(`${bucket}:${ip}`, limit, windowMs);
+  return db.allow(`${bucket}:${clientIp(c)}`, limit, windowMs);
 }
 
 const isSmartWallet = (s: unknown): s is string => typeof s === "string" && /^C[A-Z2-7]{55}$/.test(s);
@@ -386,17 +396,6 @@ app.patch("/api/products/:id", async (c) => {
 
 // ---- sales (purchases made through this store; each is on chain) ----
 
-// Temporary: shows the proxy's client-IP headers for this request (to be removed).
-app.get("/api/debug/ip", (c) =>
-  c.json({
-    xff: c.req.header("x-forwarded-for") ?? null,
-    cf: c.req.header("cf-connecting-ip") ?? null,
-    trueClient: c.req.header("true-client-ip") ?? null,
-    realIp: c.req.header("x-real-ip") ?? null,
-    remote: getConnInfo(c).remote.address ?? null,
-  }),
-);
-
 app.get("/api/sales", async (c) => {
   const creator = c.req.query("creator");
   const own = isWallet(creator);
@@ -536,8 +535,18 @@ if (PRODUCTION) {
   app.get("*", (c) => c.html(indexHtml));
 }
 
-serve({ fetch: app.fetch, port: PORT, hostname: PRODUCTION ? "0.0.0.0" : "127.0.0.1" }, () => {
+const server = serve({ fetch: app.fetch, port: PORT, hostname: PRODUCTION ? "0.0.0.0" : "127.0.0.1" }, () => {
   console.log(
     `server on :${PORT} (${sql.dialect}), sponsor ${sponsor.address}${faucet ? `, faucet ${faucet.address}` : ""}, origins ${ORIGINS.join(" ")}`,
   );
 });
+
+// Hosts stop instances with SIGTERM (on deploys, and free instances when idle):
+// finish in-flight requests, close the database, and exit cleanly.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    console.log(`${signal}: shutting down`);
+    setTimeout(() => process.exit(0), 8_000).unref();
+    server.close(() => void sql.close().finally(() => process.exit(0)));
+  });
+}
