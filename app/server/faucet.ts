@@ -4,12 +4,23 @@
 import { BASE_FEE, Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from "@stellar/stellar-sdk";
 import { address } from "../src/chain";
 import { NETWORK_PASSPHRASE, RPC_URL, USDC_ID } from "../src/config";
+import { serial } from "./serial";
 
 export function faucet(secret: string) {
   const keypair = Keypair.fromSecret(secret);
   const server = new rpc.Server(RPC_URL);
+  const queue = serial();
 
-  async function send(to: string, amount: bigint): Promise<{ ok: true; hash: string } | { ok: false; error: string }> {
+  type Sent = { ok: true; hash: string } | { ok: false; error: string };
+  const send = (to: string, amount: bigint): Promise<Sent> =>
+    queue(() =>
+      sendNow(to, amount).catch((err): Sent => ({
+        ok: false,
+        error: `faucet could not send: ${err instanceof Error ? err.message : String(err)}`,
+      })),
+    );
+
+  async function sendNow(to: string, amount: bigint): Promise<Sent> {
     const source = await server.getAccount(keypair.publicKey());
     const tx = new TransactionBuilder(source, { fee: BASE_FEE, networkPassphrase: NETWORK_PASSPHRASE })
       .addOperation(

@@ -83,6 +83,24 @@ export async function openDb(sql: Sql) {
         d.cover_key, d.cover_type, d.created_at,
       ]),
     draft: (id: string) => sql.get<Draft>("select * from drafts where id = ?", [id]),
+    pendingDrafts: async (creator: string) =>
+      Number((await sql.get<{ n: number }>("select count(*) as n from drafts where creator = ?", [creator]))?.n ?? 0),
+    /** Drafts never published by `before`; removed with their files unless something else uses them. */
+    async purgeDrafts(before: number): Promise<string[]> {
+      const stale = await sql.all<Draft>("select * from drafts where created_at < ?", [before]);
+      await sql.run("delete from drafts where created_at < ?", [before]);
+      const keys = [...new Set(stale.flatMap((d) => [d.file_key, d.cover_key]).filter((k): k is string => !!k))];
+      const unused: string[] = [];
+      for (const key of keys) {
+        const used = await sql.get(
+          `select 1 as x from products where file_key = ? or cover_key = ?
+           union all select 1 as x from drafts where file_key = ? or cover_key = ?`,
+          [key, key, key, key],
+        );
+        if (!used) unused.push(key);
+      }
+      return unused;
+    },
 
     /** Moves a draft to the published product with this on-chain id. */
     async publish(draft: Draft, productId: number): Promise<ProductRow> {
@@ -166,6 +184,12 @@ export async function openDb(sql: Sql) {
         [b.credential_id, b.contract_id, b.tx_hash, b.ledger, b.wasm_hash],
       ),
     births: (credentialId: string) => sql.all<Birth>("select * from births where credential_id = ?", [credentialId]),
+    /** A passkey wallet created through this store. */
+    isKnownWallet: async (contractId: string) =>
+      !!(await sql.get("select 1 as x from births where contract_id = ?", [contractId])),
+    /** Gives back a rate-limit slot (when the counted action failed). */
+    forgetHit: (key: string) =>
+      sql.run("update rate set count = count - 1 where key = ? and count > 0", [key]),
 
     /** A one-time sign-in challenge. */
     addNonce: (nonce: string, ttlMs: number) => sql.run("insert into nonces (nonce, expires) values (?, ?)", [nonce, Date.now() + ttlMs]),

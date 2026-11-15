@@ -8,8 +8,9 @@
 // born through us and pass everything else to the public indexer; the kit
 // still checks every claim against the chain, so it needs no trust in us.
 
-import { scValToNative, xdr } from "@stellar/stellar-sdk";
+import { hash, scValToNative, xdr } from "@stellar/stellar-sdk";
 import type { Birth } from "./db";
+import { DEFAULT_DEPLOYER, deployerOf } from "./policy";
 
 /** The wallet a successful createContractV2 made, and the passkey credential it was made for. */
 export function birthOf(func: xdr.HostFunction, returnValue: xdr.ScVal | undefined, txHash: string, ledger: number): Birth | null {
@@ -22,8 +23,14 @@ export function birthOf(func: xdr.HostFunction, returnValue: xdr.ScVal | undefin
   // The constructor's signer key data is the passkey's public key (65 bytes) followed by its credential id.
   const keyData = findKeyData(args.constructorArgs().map((a) => scValToNative(a)));
   if (!keyData) return null;
+  // Only the kit's own address scheme: its shared deployer, salted with the
+  // credential id. Then a credential id has exactly one possible wallet, and
+  // nobody can record a second "birth" for someone else's passkey.
+  const credentialId = keyData.subarray(65);
+  const preimage = args.contractIdPreimage();
+  if (deployerOf(args) !== DEFAULT_DEPLOYER || !preimage.fromAddress().salt().equals(hash(credentialId))) return null;
   return {
-    credential_id: keyData.subarray(65).toString("hex"),
+    credential_id: credentialId.toString("hex"),
     contract_id: contract,
     tx_hash: txHash,
     ledger,

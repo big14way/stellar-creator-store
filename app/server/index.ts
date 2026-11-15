@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Address, rpc, scValToNative, Transaction, type xdr } from "@stellar/stellar-sdk";
+import { Address, rpc, scValToNative, StrKey, Transaction, type xdr } from "@stellar/stellar-sdk";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { getProduct, hasPurchased, type ChainProduct } from "../src/chain";
@@ -17,10 +17,11 @@ import { birthOf, mergeLookup } from "./births";
 import { openDb, type Profile, type ProductRow } from "./db";
 import { faucet as makeFaucet } from "./faucet";
 import { diskFiles, sqlFiles } from "./files";
-import { decode, feeBumpRefusal, refusal, storeCall, walletSigners } from "./policy";
+import { decode, feeBumpRefusal, provenWallet, refusal, storeCall } from "./policy";
 import { sessions } from "./session";
 import { sponsor as makeSponsor } from "./sponsor";
 import { connect } from "./sql";
+import { IMAGE_TYPES, imageType, UNTRUSTED } from "./uploads";
 
 const PORT = Number(process.env.PORT ?? 8790);
 const DATA_DIR = process.env.DATA_DIR ?? ".data";
@@ -32,6 +33,7 @@ const MAX_COVER = 5 * 1024 * 1024;
 const CLIENT_IP_HEADER = process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || null;
 const FAUCET_AMOUNT = 10_0000000n; // 10 USDC
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 const CHALLENGE_TTL = 5 * 60 * 1000;
 
 // Where the web app is served from. Passkeys are bound to these origins.
@@ -90,6 +92,15 @@ function allow(c: Context, bucket: string, limit: number, windowMs: number): Pro
   return db.allow(`${bucket}:${clientIp(c)}`, limit, windowMs);
 }
 
+/** A product id from a URL: a positive integer, or null. */
+function parseProductId(raw: string): number | null {
+  if (!/^\d{1,15}$/.test(raw)) return null;
+  const id = Number(raw);
+  return id >= 1 ? id : null;
+}
+
+const MAX_PENDING_DRAFTS = 10;
+
 const isSmartWallet = (s: unknown): s is string => typeof s === "string" && /^C[A-Z2-7]{55}$/.test(s);
 const isWallet = (s: unknown): s is string => typeof s === "string" && /^[CG][A-Z2-7]{55}$/.test(s);
 const isHandle = (s: string) => /^[a-z0-9_]{3,24}$/.test(s);
@@ -120,7 +131,8 @@ function publicProduct(row: ProductRow, chain: ChainProduct, profile?: Profile) 
 
 async function withChain(rows: ProductRow[]) {
   const [chains, profiles] = await Promise.all([
-    Promise.all(rows.map((r) => getProduct(r.id))),
+    // One unreadable product (a network blip) shouldn't take the whole shelf down.
+    Promise.all(rows.map((r) => getProduct(r.id).catch(() => null))),
     db.profiles([...new Set(rows.map((r) => r.creator))]),
   ]);
   const byWallet = new Map(profiles.map((p) => [p.wallet, p]));
@@ -153,6 +165,24 @@ async function recordPurchase(func: xdr.HostFunction, hash: string, returnValue?
 
 const app = new Hono();
 
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+});
+
+// JSON bodies are small; only uploads (their own limit below) are large.
+const smallBody = bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: "request too large" }, 413) });
+app.use("/api/*", (c, next) => (c.req.path === "/api/drafts" ? next() : smallBody(c, next)));
+
+// Listings started but never published are removed after a day, with their files.
+async function purgeDrafts() {
+  for (const key of await db.purgeDrafts(Date.now() - DAY)) await files.remove(key);
+}
+void purgeDrafts().catch((err) => console.error("purging drafts:", err));
+setInterval(() => void purgeDrafts().catch((err) => console.error("purging drafts:", err)), HOUR).unref();
+
 app.get("/api/config", (c) =>
   c.json({
     network: NETWORK,
@@ -169,9 +199,15 @@ app.get("/api/config", (c) =>
 
 app.get("/api/relay/info", (c) => c.json({ sponsor: sponsor.address, store: STORE_ID }));
 
+/** Caps for the whole site, whatever the IP: what the sponsor and faucet can spend per day. */
+const SPONSORED_PER_DAY = Number(process.env.SPONSORED_PER_DAY ?? 3000);
+const FAUCET_PER_DAY = Number(process.env.FAUCET_PER_DAY ?? 100);
+const sponsorBudget = () => db.allow("global:sponsored", SPONSORED_PER_DAY, DAY);
+
 /** Passkey wallets: the smart-account-kit posts { func, auth } here. */
 app.post("/api/relay", async (c) => {
   if (!(await allow(c, "relay", 60, HOUR))) return c.json({ success: false, error: "too many requests" }, 429);
+  if (!(await sponsorBudget())) return c.json({ success: false, error: "the store has paid its fee budget for today" }, 429);
   const decoded = decode(await c.req.json().catch(() => null));
   if (typeof decoded === "string") return c.json({ success: false, error: decoded }, 400);
 
@@ -181,10 +217,12 @@ app.post("/api/relay", async (c) => {
   try {
     const result = await sponsor.submit(decoded);
     if (!result.ok) return c.json({ success: false, error: result.error, hash: result.hash }, 422);
-    await session.prove(c, walletSigners(decoded.auth));
-    await recordPurchase(decoded.func, result.hash, result.returnValue);
     const birth = birthOf(decoded.func, result.returnValue, result.hash, result.ledger);
     if (birth) await db.addBirth(birth);
+    // This browser now controls the wallet the contract checked, or the wallet it just created.
+    const proven = [provenWallet(decoded), birth?.contract_id].filter((w): w is string => !!w);
+    if (proven.length) await session.prove(c, proven);
+    await recordPurchase(decoded.func, result.hash, result.returnValue);
     return c.json({ success: true, hash: result.hash, status: "SUCCESS" });
   } catch (err) {
     return c.json({ success: false, error: err instanceof Error ? err.message : String(err) }, 502);
@@ -194,6 +232,7 @@ app.post("/api/relay", async (c) => {
 /** Stellar wallets (Freighter, LOBSTR, xBull...): a signed transaction we wrap in a fee bump. */
 app.post("/api/relay/fee-bump", async (c) => {
   if (!(await allow(c, "relay", 60, HOUR))) return c.json({ error: "too many requests" }, 429);
+  if (!(await sponsorBudget())) return c.json({ error: "the store has paid its fee budget for today" }, 429);
   const { xdr: envelope } = (await c.req.json().catch(() => ({}))) as { xdr?: unknown };
   let tx: Transaction;
   try {
@@ -338,15 +377,20 @@ app.post("/api/drafts", bodyLimit({ maxSize: MAX_FILE + MAX_COVER + 64 * 1024 })
   const body = await c.req.parseBody();
   const { creator, title, description, file, cover } = body;
   if (!isSmartWallet(creator)) return c.json({ error: "creator must be a passkey wallet address" }, 400);
+  if (!(await isOwner(c, creator))) return c.json({ error: "sign in with this wallet first" }, 403);
+  if ((await db.pendingDrafts(creator)) >= MAX_PENDING_DRAFTS) {
+    return c.json({ error: "you have unfinished listings; finish them or try again tomorrow" }, 429);
+  }
   if (typeof title !== "string" || !title.trim() || title.length > 120) return c.json({ error: "title: 1 to 120 characters" }, 400);
   if (typeof description !== "string" || description.length > 5000) return c.json({ error: "description: up to 5000 characters" }, 400);
   if (!(file instanceof File) || file.size === 0) return c.json({ error: "add the file buyers will download" }, 400);
   if (file.size > MAX_FILE) return c.json({ error: `file is over ${MAX_FILE_MB} MB` }, 400);
   if (cover !== undefined && cover !== "" && !(cover instanceof File)) return c.json({ error: "cover must be an image" }, 400);
   const coverFile = cover instanceof File && cover.size > 0 ? cover : null;
-  if (coverFile && (!coverFile.type.startsWith("image/") || coverFile.size > MAX_COVER)) {
-    return c.json({ error: "cover must be an image under 5 MB" }, 400);
-  }
+  if (coverFile && coverFile.size > MAX_COVER) return c.json({ error: "cover must be under 5 MB" }, 400);
+  const coverBytes = coverFile ? new Uint8Array(await coverFile.arrayBuffer()) : null;
+  const coverType = coverBytes ? imageType(coverBytes) : null;
+  if (coverBytes && !coverType) return c.json({ error: "cover must be a PNG, JPEG, WebP or GIF image" }, 400);
 
   const id = randomUUID();
   await db.addDraft({
@@ -358,8 +402,8 @@ app.post("/api/drafts", bodyLimit({ maxSize: MAX_FILE + MAX_COVER + 64 * 1024 })
     file_name: file.name.replace(/[^\w.\- ()]/g, "_").slice(0, 120) || "download",
     file_type: file.type || "application/octet-stream",
     file_size: file.size,
-    cover_key: coverFile ? await files.save(new Uint8Array(await coverFile.arrayBuffer())) : null,
-    cover_type: coverFile?.type ?? null,
+    cover_key: coverBytes ? await files.save(coverBytes) : null,
+    cover_type: coverType,
     created_at: Date.now(),
   });
   return c.json({ draftId: id });
@@ -423,27 +467,31 @@ app.get("/api/products", async (c) => {
 });
 
 app.get("/api/products/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  const row = Number.isSafeInteger(id) ? await db.product(id) : undefined;
-  const chain = row ? await getProduct(id) : null;
+  const id = parseProductId(c.req.param("id"));
+  const row = id ? await db.product(id) : undefined;
+  const chain = row ? await getProduct(row.id) : null;
   if (!row || !chain) return c.json({ error: "product not found" }, 404);
   return c.json(publicProduct(row, chain, await db.profile(row.creator)));
 });
 
 app.get("/api/products/:id/cover", async (c) => {
-  const row = await db.product(Number(c.req.param("id")));
-  const body = row?.cover_key ? await files.body(row.cover_key) : null;
-  if (!row || !body) return c.notFound();
+  const id = parseProductId(c.req.param("id"));
+  const row = id ? await db.product(id) : undefined;
+  // Only raster images we checked on upload; anything else (e.g. an SVG from before) is not served.
+  if (!row?.cover_key || !IMAGE_TYPES.includes(row.cover_type ?? "")) return c.json({ error: "no cover" }, 404);
+  const body = await files.body(row.cover_key);
+  if (!body) return c.json({ error: "no cover" }, 404);
   return c.body(body, 200, {
-    "Content-Type": row.cover_type ?? "application/octet-stream",
+    "Content-Type": row.cover_type!,
     "Cache-Control": "public, max-age=86400",
+    ...UNTRUSTED,
   });
 });
 
 /** The download link, if a wallet this browser has proven owns the product. */
 app.get("/api/products/:id/access", async (c) => {
-  const id = Number(c.req.param("id"));
-  if (!(await db.product(id))) return c.json({ error: "product not found" }, 404);
+  const id = parseProductId(c.req.param("id"));
+  if (!id || !(await db.product(id))) return c.json({ error: "product not found" }, 404);
   for (const wallet of await session.proven(c)) {
     if (await owns(id, wallet)) {
       return c.json({
@@ -491,6 +539,7 @@ app.get("/d/:token", async (c) => {
     "Content-Length": String(row.file_size),
     "Content-Disposition": `attachment; filename="${row.file_name.replace(/"/g, "")}"`,
     "Cache-Control": "private, no-store",
+    ...UNTRUSTED,
   });
 });
 
@@ -518,15 +567,30 @@ app.get("/api/rates", async (c) => {
 app.post("/api/faucet", async (c) => {
   if (!faucet) return c.json({ error: "no faucet on this network" }, 404);
   const { wallet } = (await c.req.json().catch(() => ({}))) as { wallet?: unknown };
-  if (!isWallet(wallet)) return c.json({ error: "wallet must be a Stellar address" }, 400);
+  if (!isWallet(wallet) || !(StrKey.isValidContract(wallet) || StrKey.isValidEd25519PublicKey(wallet))) {
+    return c.json({ error: "wallet must be a Stellar address" }, 400);
+  }
+  // Any contract address can hold USDC, so only passkey wallets created here qualify.
+  if (wallet.startsWith("C") && !(await db.isKnownWallet(wallet))) {
+    return c.json({ error: "test USDC goes to wallets made on this site" }, 403);
+  }
   if (!(await allow(c, "faucet", 5, HOUR)) || !(await db.allow(`faucet:${wallet}`, 1, HOUR))) {
     return c.json({ error: "test USDC already sent recently, try again in an hour" }, 429);
   }
+  if (!(await db.allow("global:faucet", FAUCET_PER_DAY, DAY))) {
+    return c.json({ error: "the faucet has given out today's test USDC; try again tomorrow" }, 429);
+  }
   const sent = await faucet.send(wallet, FAUCET_AMOUNT);
-  return sent.ok ? c.json({ amount: FAUCET_AMOUNT.toString(), hash: sent.hash }) : c.json({ error: sent.error }, 502);
+  if (sent.ok) return c.json({ amount: FAUCET_AMOUNT.toString(), hash: sent.hash });
+  // Nothing was sent, so this try doesn't count against the wallet's hour or the day.
+  await db.forgetHit(`faucet:${wallet}`);
+  await db.forgetHit("global:faucet");
+  return c.json({ error: sent.error }, 502);
 });
 
 // ---- the web app (production build) ----
+
+app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
 
 if (PRODUCTION) {
   const indexHtml = readFileSync("dist/index.html", "utf8");

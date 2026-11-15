@@ -2,7 +2,7 @@
 // when hosted, where the disk does not survive a restart.
 
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { Sql } from "./sql";
@@ -11,6 +11,7 @@ export type Files = {
   save(bytes: Uint8Array): Promise<string>;
   /** The file as a Response body. */
   body(key: string): Promise<ReadableStream<Uint8Array> | Uint8Array<ArrayBuffer> | null>;
+  remove(key: string): Promise<void>;
 };
 
 const keyOf = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -33,6 +34,9 @@ export function diskFiles(dataDir: string): Files {
       const p = path(key);
       return existsSync(p) ? (Readable.toWeb(createReadStream(p)) as ReadableStream<Uint8Array>) : null;
     },
+    async remove(key) {
+      rmSync(path(key), { force: true });
+    },
   };
 }
 
@@ -50,6 +54,9 @@ export function sqlFiles(sql: Sql): Files {
     async body(key) {
       const row = await sql.get<{ bytes: Uint8Array }>("select bytes from blobs where key = ?", [checked(key)]);
       return row ? new Uint8Array(row.bytes) : null;
+    },
+    async remove(key) {
+      await sql.run("delete from blobs where key = ?", [checked(key)]);
     },
   };
 }

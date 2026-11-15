@@ -1,10 +1,17 @@
 // What the fee sponsor will pay for. Pure functions, so they can be tested
 // without a network or a key.
 
-import { Address, Operation, Transaction, xdr } from "@stellar/stellar-sdk";
+import { Address, Keypair, Operation, Transaction, hash, xdr } from "@stellar/stellar-sdk";
 import { ACCOUNT_WASM_HASH, STORE_ID, USDC_ID } from "../src/config";
 
 export type Decoded = { func: xdr.HostFunction; auth: xdr.SorobanAuthorizationEntry[] };
+
+/**
+ * smart-account-kit's shared deployer (from its fixed, public seed). Every
+ * wallet the app creates is deployed from it with salt sha256(credential id),
+ * so a passkey credential can only ever have one wallet address.
+ */
+export const DEFAULT_DEPLOYER = Keypair.fromRawEd25519Seed(hash(Buffer.from("openzeppelin-smart-account-kit"))).publicKey();
 
 export function decode(body: unknown): Decoded | string {
   if (!body || typeof body !== "object") return "expected { func, auth }";
@@ -32,11 +39,25 @@ const STORE_CALLS: Record<string, { walletArg?: number; needsAuth: boolean }> = 
 
 /** Why this call will not be sponsored, or null if it will. */
 export function refusal(
-  { func, auth }: Decoded,
+  decoded: Decoded,
   sponsorAddress: string,
   store = STORE_ID,
   walletWasmHash = ACCOUNT_WASM_HASH,
   usdc = USDC_ID,
+): string | null {
+  try {
+    return refusalOf(decoded, sponsorAddress, store, walletWasmHash, usdc);
+  } catch {
+    return "malformed call";
+  }
+}
+
+function refusalOf(
+  { func, auth }: Decoded,
+  sponsorAddress: string,
+  store: string,
+  walletWasmHash: string,
+  usdc: string,
 ): string | null {
   for (const entry of auth) {
     const signer = addressSigner(entry);
@@ -63,16 +84,21 @@ export function refusal(
         const arg = call.args()[rule.walletArg];
         const wallet = arg ? Address.fromScVal(arg).toString() : "";
         if (!wallet.startsWith("C")) return "only smart wallets are sponsored";
+        // Soroban never checks an entry nothing asks for, so extra entries could
+        // name anyone. Only the wallet the call acts for may sign.
+        if (!auth.every((a) => addressSigner(a) === wallet)) return "only the wallet the call acts for may sign";
       }
       return null;
     }
     case xdr.HostFunctionType.hostFunctionTypeCreateContractV2(): {
       if (auth.length === 0) return "no authorization entries";
-      const exec = func.createContractV2().executable();
+      const args = func.createContractV2();
+      const exec = args.executable();
       if (exec.switch() !== xdr.ContractExecutableType.contractExecutableWasm()) {
         return "only wallet code can be deployed";
       }
       if (exec.wasmHash().toString("hex") !== walletWasmHash) return "only the approved wallet code is sponsored";
+      if (deployerOf(args) !== DEFAULT_DEPLOYER) return "wallets are deployed by the kit's shared deployer only";
       return null;
     }
     default:
@@ -80,9 +106,33 @@ export function refusal(
   }
 }
 
-/** Smart wallets that signed these entries. A successful transaction proves the submitter holds their passkeys. */
-export function walletSigners(auth: xdr.SorobanAuthorizationEntry[]): string[] {
-  return auth.map(addressSigner).filter((a): a is string => !!a && a.startsWith("C"));
+/**
+ * The smart wallet a successful sponsored call proves the sender controls:
+ * the one whose signature the contract itself required (the buyer, the
+ * creator, or the wallet sending USDC). Never just any signer of an entry:
+ * Soroban ignores entries that nothing asks for, so those prove nothing.
+ */
+export function provenWallet({ func, auth }: Decoded, store = STORE_ID, usdc = USDC_ID): string | null {
+  try {
+    if (func.switch() !== xdr.HostFunctionType.hostFunctionTypeInvokeContract()) return null;
+    const call = func.invokeContract();
+    const contract = Address.fromScAddress(call.contractAddress()).toString();
+    const fn = call.functionName().toString();
+    const acts = (contract === store && (fn === "buy" || fn === "create_product")) || (contract === usdc && fn === "transfer");
+    const first = call.args()[0];
+    if (!acts || !first) return null;
+    const wallet = Address.fromScVal(first).toString();
+    return wallet.startsWith("C") && auth.length > 0 && auth.every((a) => addressSigner(a) === wallet) ? wallet : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The deployer address of a contract creation, or null if it isn't deployed from an address. */
+export function deployerOf(args: xdr.CreateContractArgsV2): string | null {
+  const preimage = args.contractIdPreimage();
+  if (preimage.switch() !== xdr.ContractIdPreimageType.contractIdPreimageFromAddress()) return null;
+  return Address.fromScAddress(preimage.fromAddress().address()).toString();
 }
 
 /** The store function and its decoded wallet argument, for bookkeeping after success. */
@@ -121,6 +171,14 @@ const FEE_BUMP_CALLS = new Set(["buy", "claim"]);
  * in a fee-bump transaction, so it can only spend the wallet's own funds.
  */
 export function feeBumpRefusal(tx: Transaction, sponsorAddress: string, store = STORE_ID): string | null {
+  try {
+    return feeBumpRefusalOf(tx, sponsorAddress, store);
+  } catch {
+    return "malformed transaction";
+  }
+}
+
+function feeBumpRefusalOf(tx: Transaction, sponsorAddress: string, store: string): string | null {
   if (!tx.source.startsWith("G")) return "the source must be a Stellar account";
   if (tx.source === sponsorAddress) return "the sponsor never sends its own calls this way";
   if (tx.operations.length !== 1) return "exactly one operation";
@@ -139,6 +197,7 @@ export function feeBumpRefusal(tx: Transaction, sponsorAddress: string, store = 
     const signer = addressSigner(entry);
     if (signer !== null && signer !== tx.source) return "only the wallet itself may authorize";
   }
+  if (tx.toEnvelope().switch() !== xdr.EnvelopeType.envelopeTypeTx()) return "unsupported transaction envelope";
   const data = tx.toEnvelope().v1().tx().ext();
   if (data.switch() !== 1) return "missing Soroban resources";
   if (BigInt(data.sorobanData().resourceFee().toString()) > MAX_RESOURCE_FEE) return "resource fee is above the sponsor's cap";

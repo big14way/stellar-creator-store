@@ -14,7 +14,7 @@ import {
   nativeToScVal,
   xdr,
 } from "@stellar/stellar-sdk";
-import { decode, feeBumpRefusal, refusal, walletSigners, type Decoded } from "../server/policy";
+import { DEFAULT_DEPLOYER, decode, feeBumpRefusal, provenWallet, refusal, type Decoded } from "../server/policy";
 
 const STORE = StrKey.encodeContract(Buffer.alloc(32, 1));
 const OTHER = StrKey.encodeContract(Buffer.alloc(32, 2));
@@ -37,12 +37,12 @@ function invoke(contract: string, fn: string, args: xdr.ScVal[]): xdr.HostFuncti
 const buy = (buyer: string, contract = STORE, fn = "buy") =>
   invoke(contract, fn, [Address.fromString(buyer).toScVal(), nativeToScVal(1n, { type: "u64" }), xdr.ScVal.scvVoid()]);
 
-function deploy(executable: xdr.ContractExecutable): xdr.HostFunction {
+function deploy(executable: xdr.ContractExecutable, deployer = DEFAULT_DEPLOYER): xdr.HostFunction {
   return xdr.HostFunction.hostFunctionTypeCreateContractV2(
     new xdr.CreateContractArgsV2({
       contractIdPreimage: xdr.ContractIdPreimage.contractIdPreimageFromAddress(
         new xdr.ContractIdPreimageFromAddress({
-          address: Address.fromString(PERSON).toScAddress(),
+          address: Address.fromString(deployer).toScAddress(),
           salt: Buffer.alloc(32, 9),
         }),
       ),
@@ -92,7 +92,10 @@ test("sponsors a smart wallet buying from our store", () => {
 
 test("sponsors deploying a wallet from the approved code only", () => {
   const ok = deploy(xdr.ContractExecutable.contractExecutableWasm(Buffer.from(WALLET_WASM, "hex")));
-  assert.equal(check({ func: ok, auth: [signedBy(PERSON)] }), null);
+  assert.equal(check({ func: ok, auth: [signedBy(DEFAULT_DEPLOYER)] }), null);
+
+  const elsewhere = deploy(xdr.ContractExecutable.contractExecutableWasm(Buffer.from(WALLET_WASM, "hex")), PERSON);
+  assert.match(check({ func: elsewhere, auth: [signedBy(PERSON)] })!, /shared deployer/);
 
   const other = deploy(xdr.ContractExecutable.contractExecutableWasm(Buffer.alloc(32, 7)));
   assert.match(check({ func: other, auth: [signedBy(PERSON)] })!, /approved wallet code/);
@@ -147,8 +150,29 @@ test("refuses any other contract or function", () => {
   assert.match(check({ func: buy(WALLET, STORE, "upgrade"), auth: [signedBy(WALLET)] })!, /only buy, create_product/);
 });
 
-test("lists the smart wallets that signed", () => {
-  assert.deepEqual(walletSigners([signedBy(WALLET), signedBy(PERSON, true)]), [WALLET]);
+test("a sponsored call proves only the wallet the contract checked", () => {
+  const list = invoke(STORE, "create_product", [Address.fromString(WALLET).toScVal(), nativeToScVal(5n, { type: "i128" })]);
+  const edit = invoke(STORE, "update_product", [nativeToScVal(1n, { type: "u64" })]);
+  const claim = invoke(STORE, "claim", [Address.fromString(WALLET).toScVal()]);
+  assert.equal(provenWallet({ func: buy(WALLET), auth: [signedBy(WALLET)] }, STORE, USDC), WALLET);
+  assert.equal(provenWallet({ func: list, auth: [signedBy(WALLET)] }, STORE, USDC), WALLET);
+  assert.equal(provenWallet({ func: transfer(WALLET, PERSON), auth: [signedBy(WALLET)] }, STORE, USDC), WALLET);
+  // Signatures the contract never asks for prove nothing.
+  assert.equal(provenWallet({ func: edit, auth: [signedBy(WALLET)] }, STORE, USDC), null);
+  assert.equal(provenWallet({ func: claim, auth: [signedBy(WALLET)] }, STORE, USDC), null);
+  assert.equal(provenWallet({ func: buy(WALLET), auth: [signedBy(WALLET), signedBy(OTHER)] }, STORE, USDC), null);
+});
+
+test("refuses extra signatures for anyone but the wallet the call acts for", () => {
+  // Soroban doesn't check an entry nothing asks for, so a forged one naming another wallet would pass on chain.
+  assert.match(check({ func: buy(WALLET), auth: [signedBy(WALLET), signedBy(OTHER)] })!, /only the wallet the call acts for/);
+  const list = invoke(STORE, "create_product", [Address.fromString(WALLET).toScVal(), nativeToScVal(5n, { type: "i128" })]);
+  assert.match(check({ func: list, auth: [signedBy(OTHER)] })!, /only the wallet the call acts for/);
+});
+
+test("refuses malformed arguments instead of throwing", () => {
+  const bad = invoke(STORE, "buy", [nativeToScVal(1n, { type: "u64" })]);
+  assert.equal(check({ func: bad, auth: [signedBy(WALLET)] }), "malformed call");
 });
 
 test("refuses a buyer that is a plain account, so the sponsor can never be the buyer", () => {

@@ -2,8 +2,9 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Address, Keypair, StrKey, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { Address, Keypair, StrKey, hash, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { birthOf, mergeLookup } from "../server/births";
+import { DEFAULT_DEPLOYER } from "../server/policy";
 
 const WALLET = StrKey.encodeContract(Buffer.alloc(32, 5));
 const VERIFIER = StrKey.encodeContract(Buffer.alloc(32, 6));
@@ -11,12 +12,12 @@ const WASM = Buffer.alloc(32, 7);
 const credential = Buffer.alloc(20, 0xab);
 const keyData = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 1), credential]);
 
-function deploy(): xdr.HostFunction {
+function deploy(deployer = DEFAULT_DEPLOYER, salt = hash(credential)): xdr.HostFunction {
   const signer = xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("External"), Address.fromString(VERIFIER).toScVal(), xdr.ScVal.scvBytes(keyData)]);
   return xdr.HostFunction.hostFunctionTypeCreateContractV2(
     new xdr.CreateContractArgsV2({
       contractIdPreimage: xdr.ContractIdPreimage.contractIdPreimageFromAddress(
-        new xdr.ContractIdPreimageFromAddress({ address: Address.fromString(Keypair.random().publicKey()).toScAddress(), salt: Buffer.alloc(32) }),
+        new xdr.ContractIdPreimageFromAddress({ address: Address.fromString(deployer).toScAddress(), salt }),
       ),
       executable: xdr.ContractExecutable.contractExecutableWasm(WASM),
       constructorArgs: [xdr.ScVal.scvVec([signer]), nativeToScVal(new Map())],
@@ -33,6 +34,12 @@ test("records the wallet and passkey credential a creation made", () => {
     ledger: 1234,
     wasm_hash: WASM.toString("hex"),
   });
+});
+
+test("ignores wallets made another way, so nobody can claim a second wallet for someone's passkey", () => {
+  const ret = Address.fromString(WALLET).toScVal();
+  assert.equal(birthOf(deploy(Keypair.random().publicKey()), ret, "aa", 1), null);
+  assert.equal(birthOf(deploy(DEFAULT_DEPLOYER, Buffer.alloc(32)), ret, "aa", 1), null);
 });
 
 test("ignores anything that isn't a wallet creation", () => {

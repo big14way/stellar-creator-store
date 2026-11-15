@@ -43,6 +43,9 @@ export async function postgres(url: string): Promise<Sql> {
   // int8 columns (our millisecond timestamps) as numbers, not strings.
   pg.types.setTypeParser(20, (v: string) => Number(v));
   const pool = new pg.Pool({ connectionString: url, max: 5, idleTimeoutMillis: 30_000 });
+  // An idle client dropped by the server (a restart, a scale-to-zero) emits
+  // "error" on the pool; unhandled, that would crash the process.
+  pool.on("error", (err) => console.error("postgres:", err.message));
   const numbered = (sql: string) => {
     let n = 0;
     return sql.replace(/\?/g, () => `$${++n}`);
