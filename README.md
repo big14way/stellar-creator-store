@@ -130,17 +130,28 @@ Store contract [`CD6MR5EW…A3ZU`](https://stellar.expert/explorer/testnet/contr
 - `buy`, `create_product`, `update_product` and `claim` on our store, and a smart wallet sending its own USDC;
 - a Stellar wallet's own `buy` or `claim`, wrapped in a fee bump: exactly one call, for itself, signed by itself.
 
-It refuses anything the sponsor would authorize just by paying (source-account credentials), any call where the sponsor would be a signer, other contracts and functions, and anything whose resource fee is above 0.5 XLM. It simulates before paying, so a failing purchase costs nothing. Rate limits are kept in the database, so they survive restarts.
+It refuses:
+- anything the sponsor would authorize just by paying (source-account credentials);
+- any call where the sponsor would be a signer;
+- signatures from anyone but the wallet the call acts for;
+- wallets deployed other than through the kit's shared deployer;
+- other contracts and functions;
+- anything whose resource fee is above 0.5 XLM;
+- a fee-bumped transaction whose declared resource fee is far above what its simulation needs.
+
+It simulates before paying, so a failing purchase costs nothing. Rate limits are per client IP (taken from the header Cloudflare sets in front of Render, never from the forgeable `X-Forwarded-For`) and kept in the database. On top of them, the sponsor and the faucet each have a daily budget for the whole site, and the faucet only pays Stellar accounts and wallets created on the site.
 
 **How the server knows who you are.** A browser proves it controls a wallet by one of:
 
-- submitting through the server a transaction that wallet signed, which then succeeds on chain;
+- submitting through the server a transaction that succeeds on chain and that the contract required that wallet to sign (the buyer of `buy`, the creator of `create_product`, the sender of a USDC transfer), or creating the wallet through the store;
 - signing a one-time passkey challenge, which the server checks against the public key stored in the wallet's own contract (`get_context_rule`), with the origin, relying party and user-verification flags;
 - signing a SEP-10 style challenge transaction with a Stellar wallet.
 
 Challenges are single use and expire in 5 minutes. Proven wallets go in a signed, HTTP-only cookie.
 
 **Downloads.** A download link is an HMAC of the product and the buyer, like Gumroad's or Selar's private links. The server checks the on-chain receipt each time before serving the file.
+
+**Uploads.** Only a creator signed in with their wallet can upload, with at most 10 unfinished listings; listings never published are deleted after a day. Covers must be PNG, JPEG, WebP or GIF, checked by their bytes. Uploaded files are served with `nosniff` and a sandboxing content security policy, so nothing uploaded can run as a page on the site.
 
 **Finding a wallet on a new device.** smart-account-kit looks a passkey up in an indexer, then checks the wallet's creation transaction on chain itself. The public indexer can take a long time to record a new wallet's creation, so a creator who had just made one couldn't sign in on their phone. Our server records the creation of every wallet it sponsors and answers lookups in the indexer's format, passing anything else to the public indexer. The kit trusts none of it without checking the chain.
 
