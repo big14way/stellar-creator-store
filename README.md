@@ -240,3 +240,5 @@ A percentage of each sale, taken by the contract at checkout and set below what 
 ## License
 
 MIT
+
+Photos are from Unsplash under the Unsplash License; each one is credited in [app/public/photos/CREDITS.md](app/public/photos/CREDITS.md).

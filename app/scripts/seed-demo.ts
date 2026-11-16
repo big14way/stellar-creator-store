@@ -23,6 +23,7 @@ const APP = (process.env.APP_URL ?? "").replace(/\/$/, "");
 const SAVED = ".data-seed/creator.json";
 const LONG = 180_000;
 const here = (name: string) => new URL(`./demo/${name}`, import.meta.url);
+const photo = (name: string) => new URL(`../public/photos/${name}`, import.meta.url);
 
 // ---- the drum pack: 16-bit 44.1 kHz mono WAVs, deterministic ----
 
@@ -211,6 +212,8 @@ const PRODUCTS = [
       "Twelve drum sounds (three kicks, two snares, three hats, a clap, a shaker and two toms) as 16-bit, 44.1 kHz WAV files. " +
       "Synthesized for Paperstall's demo shop and released under CC0, so use them in anything.\n\n" +
       "Demo listing: buy it with test USDC from the faucet to try the checkout.",
+    kind: "audio",
+    cover: "cover-studio.webp",
     file: { name: "drum-one-shots-vol-1.zip", mimeType: "application/zip", buffer: drumPack() },
     price: "2",
     affiliate: "10",
@@ -221,6 +224,8 @@ const PRODUCTS = [
       "A one-page invoice you fill in and print from any browser: your details and the client's, line items in dollars, " +
       "a naira column at the rate you type, and how to pay you in USDC on Stellar. One HTML file, nothing to install. CC0.\n\n" +
       "Demo listing: buy it with test USDC from the faucet to try the checkout.",
+    kind: "template",
+    cover: "cover-papers.webp",
     file: { name: "invoice-template.html", mimeType: "text/html", buffer: readFileSync(here("invoice.html")) },
     price: "1",
     affiliate: "0",
@@ -231,6 +236,8 @@ const PRODUCTS = [
       "Twelve steps from a finished file to your first sale and cash-out: packaging the download, pricing in dollars, " +
       "splits with collaborators, affiliate links and cashing out on a schedule. Plain Markdown, CC0.\n\n" +
       "Demo listing: buy it with test USDC from the faucet to try the checkout.",
+    kind: "ebook",
+    cover: "cover-notebook.webp",
     file: { name: "usdc-sellers-checklist.md", mimeType: "text/markdown", buffer: readFileSync(here("checklist.md")) },
     price: "0.5",
     affiliate: "0",
@@ -295,7 +302,9 @@ async function main() {
       }
       await page.locator("input[name=title]").fill(p.title);
       await page.locator("textarea[name=description]").fill(p.description);
+      await page.locator("select[name=kind]").selectOption(p.kind);
       await page.locator("input[name=file]").setInputFiles(p.file);
+      await page.locator("input[name=cover]").setInputFiles({ name: p.cover, mimeType: "image/webp", buffer: readFileSync(photo(p.cover)) });
       await page.getByLabel("Price in USDC").fill(p.price);
       await page.getByLabel("Affiliate share, %").fill(p.affiliate);
       await page.getByRole("button", { name: "List it" }).click();

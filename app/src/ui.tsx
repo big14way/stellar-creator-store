@@ -1,8 +1,9 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { api, type Product, type Rates, type Sale } from "./api";
 import { formatUsdc } from "./chain";
 import { EXPLORER } from "./config";
+import { kindOf } from "./kinds";
 
 /** Our mark: a receipt with a torn edge and a four-point star cut out of it. */
 export function Logo({ size = 26 }: { size?: number }) {
@@ -35,28 +36,56 @@ export function stampFor(p: Product): string | null {
   return null;
 }
 
-type TagProps = { children: ReactNode; icon: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>;
+type Variant = "solid" | "dark" | "light";
+type TagProps = { children: ReactNode; icon: ReactNode; variant?: Variant } & ButtonHTMLAttributes<HTMLButtonElement>;
 
-/** The price-tag button: punched hole on the left, dark icon tile on the right. */
-export function TagButton({ children, icon, className, ...rest }: TagProps) {
+/** The inside of a price-tag button: punched hole, a fill that wipes out from the hole, a label that rolls, an icon tile. */
+function TagInside({ children, icon }: { children: ReactNode; icon: ReactNode }) {
   return (
-    <button className={`tag ${className ?? ""}`} {...rest}>
-      {children}
+    <>
+      <span className="tag-hole" aria-hidden="true" />
+      <span className="tag-fill" aria-hidden="true" />
+      <span className="tag-lbl">
+        <span className="l1">{children}</span>
+        <span className="l2" aria-hidden="true">
+          {children}
+        </span>
+      </span>
       <span className="tile" aria-hidden="true">
         {icon}
       </span>
+    </>
+  );
+}
+
+/** The price-tag button. On hover it swings on its hole, like a tag on a string. */
+export function TagButton({ children, icon, variant = "solid", className, ...rest }: TagProps) {
+  return (
+    <button className={`tag ${variant} ${className ?? ""}`} {...rest}>
+      <TagInside icon={icon}>{children}</TagInside>
     </button>
   );
 }
 
-export function TagLink({ href, children, icon }: { href: string; children: ReactNode; icon: ReactNode }) {
+export function TagLink({ href, children, icon, variant = "solid" }: { href: string; children: ReactNode; icon: ReactNode; variant?: Variant }) {
   return (
-    <Link href={href} className="tag">
-      {children}
-      <span className="tile" aria-hidden="true">
-        {icon}
-      </span>
+    <Link href={href} className={`tag ${variant}`}>
+      <TagInside icon={icon}>{children}</TagInside>
     </Link>
+  );
+}
+
+/** A tag that is a plain link (a download, an outside page). */
+export function TagAnchor({
+  children,
+  icon,
+  variant = "solid",
+  ...rest
+}: { children: ReactNode; icon: ReactNode; variant?: Variant } & AnchorHTMLAttributes<HTMLAnchorElement>) {
+  return (
+    <a className={`tag ${variant}`} {...rest}>
+      <TagInside icon={icon}>{children}</TagInside>
+    </a>
   );
 }
 
@@ -85,34 +114,85 @@ export function ProductBox({ product, big, href }: { product: Product; big?: boo
   );
   const style = { "--tone": toneFor(product.id) } as CSSProperties;
   return href ? (
-    <Link href={href} className={`box ${big ? "big" : ""}`} style={style} aria-label={product.title}>
+    <Link href={href} className={`box kind-${product.kind} ${big ? "big" : ""}`} style={style} aria-label={product.title}>
       {inner}
     </Link>
   ) : (
-    <div className={`box ${big ? "big" : ""}`} style={style}>
+    <div className={`box kind-${product.kind} ${big ? "big" : ""}`} style={style}>
       {inner}
     </div>
   );
 }
 
+/** A product as a card: duotone cover, stamp, title and price, aisle underneath. */
 export function ProductCard({ product }: { product: Product }) {
   const stamp = stampFor(product);
   return (
     <Link href={`/p/${product.id}`} className="card">
-      <div className="card-art" style={{ "--tone": toneFor(product.id) } as CSSProperties}>
-        <div className="art-inner">
-          {product.cover ? <img src={product.cover} alt="" /> : <div className="placeholder">{product.title}</div>}
-        </div>
+      <div className="card-art duo" style={{ "--tone": toneFor(product.id) } as CSSProperties}>
+        {product.cover ? <img src={product.cover} alt="" loading="lazy" /> : <div className="placeholder">{product.title}</div>}
         {stamp && <span className="stamp">{stamp}</span>}
       </div>
       <div className="card-meta">
         <strong>{product.title}</strong>
         <span className="card-price">${formatUsdc(BigInt(product.price))}</span>
       </div>
-      <span className="mono muted card-sub">
-        {fileKind(product.file.name)} · {product.sales} sold
+      <span className="mono card-sub">
+        {kindOf(product.kind).one} · {fileKind(product.file.name)}
       </span>
     </Link>
+  );
+}
+
+/** A box standing on a shelf stage, for product grids (the box, then its title, price and aisle). */
+export function StagedProduct({ product }: { product: Product }) {
+  return (
+    <Link href={`/p/${product.id}`} className="staged">
+      <div className="stage">
+        <ProductBox product={product} />
+        <span className="stage-plank" />
+      </div>
+      <div className="card-meta">
+        <strong>{product.title}</strong>
+        <span className="card-price">${formatUsdc(BigInt(product.price))}</span>
+      </div>
+      <span className="mono card-sub">
+        {kindOf(product.kind).one} · {fileKind(product.file.name)} · {product.sales} sold
+      </span>
+    </Link>
+  );
+}
+
+/** One sale as a pinned receipt: what sold, for how much, to which wallet, and its transaction. */
+export function SaleCard({ sale, index }: { sale: Sale; index: number }) {
+  const tilt = [-2, 1.5, -1, 2][index % 4];
+  return (
+    <a className="sale-card" href={explorerTx(sale.txHash)} target="_blank" rel="noreferrer" style={{ "--r": `${tilt}deg` } as CSSProperties}>
+      <span className="pin" aria-hidden="true" />
+      <div className="sale-head mono">
+        <span className="ok">Settled</span>
+        <span>#{sale.txHash.slice(0, 6)}</span>
+      </div>
+      <strong className="sale-title">{sale.title}</strong>
+      <div className="sale-price">{sale.price ? `$${formatUsdc(BigInt(sale.price))}` : "Paid"}</div>
+      <dl className="sale-rows mono">
+        <div>
+          <dt>Buyer</dt>
+          <dd>
+            {sale.buyer.slice(0, 4)}…{sale.buyer.slice(-4)}
+          </dd>
+        </div>
+        <div>
+          <dt>When</dt>
+          <dd>{ago(sale.at)}</dd>
+        </div>
+        <div>
+          <dt>Paid in</dt>
+          <dd>USDC · 1 transaction</dd>
+        </div>
+      </dl>
+      <span className="sale-stamp mono">On Stellar ↗</span>
+    </a>
   );
 }
 

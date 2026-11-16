@@ -90,12 +90,15 @@ it("publishing a draft and recording a purchase", async () => {
 
   const draft = {
     id: "d1", creator: W(1), title: "Beat pack", description: "", file_key: key, file_name: "a.zip",
-    file_type: "application/zip", file_size: 3, cover_key: null, cover_type: null, created_at: 1,
+    file_type: "application/zip", file_size: 3, cover_key: null, cover_type: null, kind: "audio", created_at: 1,
   };
   await db.addDraft(draft);
   await db.publish((await db.draft("d1"))!, 7);
   assert.equal(await db.draft("d1"), undefined);
   assert.equal((await db.product(7))?.title, "Beat pack");
+  assert.equal((await db.product(7))?.kind, "audio");
+  await db.updateDetails(7, "Beat pack", "", null);
+  assert.equal((await db.product(7))?.kind, "audio", "an edit without a kind keeps the old one");
 
   await db.addPurchase(7, W(2), "hash1", "30000000");
   await db.addPurchase(7, W(2), "hash2", "30000000"); // a repeat is ignored
@@ -103,6 +106,7 @@ it("publishing a draft and recording a purchase", async () => {
   assert.deepEqual((await db.purchasesBy([W(2)])).map((p) => [p.id, p.tx_hash, p.paid]), [[7, "hash1", "30000000"]]);
   assert.equal((await db.recentSales(10, W(1))).length, 1);
   assert.equal((await db.recentSales(10, W(3))).length, 0);
+  assert.deepEqual((await db.allSales()).map((s) => [s.product_id, s.price, s.creator]), [[7, "30000000", W(1)]]);
   await db.sql.close();
 });
 }

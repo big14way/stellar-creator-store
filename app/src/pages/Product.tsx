@@ -1,10 +1,26 @@
 import { Copy, Download, Fingerprint, ShoppingBag, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { api, fileSize, shopPath, type Access, type Config, type Product } from "../api";
+import { api, fileSize, shopPath, type Access, type Config, type Product, type Sale } from "../api";
 import { formatUsdc, formatUsdcUp, usdcBalance } from "../chain";
 import { accountState, addUsdc, buyWithStellar, friendbot, type AccountState } from "../stellarWallet";
-import { explorerTx, Eyebrow, fileKind, Local, ProductBox, RatesCredit, Receipt, Spec, Status, TagButton } from "../ui";
+import { kindOf } from "../kinds";
+import { Headline, Reveal } from "../motion";
+import {
+  explorerTx,
+  Eyebrow,
+  fileKind,
+  Local,
+  ProductBox,
+  ProductCard,
+  RatesCredit,
+  Receipt,
+  SaleCard,
+  Spec,
+  Status,
+  TagAnchor,
+  TagButton,
+} from "../ui";
 import { short, useWallet } from "../useWallet";
 import { callStore } from "../wallet";
 
@@ -21,6 +37,8 @@ export function ProductPage({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [shelf, setShelf] = useState<Product[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
 
   const ref = new URLSearchParams(window.location.search).get("ref");
 
@@ -32,6 +50,8 @@ export function ProductPage({ id }: { id: string }) {
       .then(setProduct)
       .catch(() => setNotFound(true));
     api.config().then(setConfig).catch(() => {});
+    api.products().then(setShelf).catch(() => setShelf([]));
+    api.sales().then(setSales).catch(() => setSales([]));
   }, [id]);
 
   // Whether this browser already owns it: again whenever a wallet signs in or changes.
@@ -221,34 +241,39 @@ export function ProductPage({ id }: { id: string }) {
     </div>
   );
 
+  const kind = kindOf(product.kind);
+  const more = [
+    ...shelf.filter((p) => p.id !== product.id && p.kind === product.kind),
+    ...shelf.filter((p) => p.id !== product.id && p.kind !== product.kind),
+  ].slice(0, 3);
+  const receipts = sales.filter((s) => s.productId === product.id);
+
   return (
     <>
       <section className="band dark lined product-top">
         <div className="container product-grid">
-          <div>
+          <div className="product-box-col">
             <ProductBox product={product} big />
           </div>
           <div>
             <p className="crumbs mono">
-              <Link href="/">Store</Link>
+              <Link href="/">Home</Link>
               <span className="sep">●</span>
               <Link href={shopPath(product.creator, product.creatorProfile)}>{by}</Link>
               <span className="sep">●</span>
-              {product.title}
+              <span className="here">{product.title}</span>
             </p>
-            <h1>{product.title}</h1>
+            <Headline as="h1" lines={[product.title]} className="product-title" />
             <p className="product-meta mono">
-              {fileKind(product.file.name)} · {fileSize(product.file.size)} · {product.sales} sold · by{" "}
-              <Link href={shopPath(product.creator, product.creatorProfile)} className="text-link">
-                {by}
-              </Link>
+              {kind.one} · {fileKind(product.file.name)} · {fileSize(product.file.size)} · by{" "}
+              <Link href={shopPath(product.creator, product.creatorProfile)}>{by}</Link>
             </p>
             {product.description && <p className="lead description">{product.description}</p>}
             <p className="price" data-testid="price">
               ${formatUsdc(price)}
             </p>
             <p className="statline mono">
-              <Local usdc={price} /> · Instant download · Paid in USDC
+              Instant download · {product.sales} sold · Paid in USDC · <Local usdc={price} />
             </p>
 
             <div className="buy-panel">
@@ -266,12 +291,9 @@ export function ProductPage({ id }: { id: string }) {
                   </div>
                   <div className="receipt-title">{product.file.name}</div>
                   <div className="actions" style={{ marginTop: 0 }}>
-                    <a className="tag" href={owned} data-testid="download">
+                    <TagAnchor href={owned} data-testid="download" icon={<Download size={16} />}>
                       Download
-                      <span className="tile" aria-hidden="true">
-                        <Download size={16} />
-                      </span>
-                    </a>
+                    </TagAnchor>
                     <button className="ghost" onClick={() => copy(downloadUrl!, "download")}>
                       <Copy size={14} /> {copied === "download" ? "Copied" : "Copy link"}
                     </button>
@@ -358,67 +380,115 @@ export function ProductPage({ id }: { id: string }) {
         </div>
       </section>
 
-      <section className="band cream tight">
-        <div className="container two-col">
+      <section className="band cream product-details">
+        <div className="container product-grid">
+          <div />
           <div>
-            <Eyebrow>Where your ${formatUsdc(price)} goes</Eyebrow>
-            <Spec
-              rows={[
-                ...product.shares.map((s, i) => ({
-                  label: `Co-creator ${i + 1}`,
-                  value: `$${formatUsdc(cut(s.bps))}`,
-                  note: `${s.bps / 100}% · ${short(s.to)}`,
-                })),
-                ...(product.affiliateBps > 0
-                  ? [
-                      {
-                        label: "Affiliate",
-                        value: affiliate ? `$${formatUsdc(cut(product.affiliateBps))}` : "$0.00",
-                        note: affiliate
-                          ? `${product.affiliateBps / 100}% to ${short(affiliate)}, who sent you here`
-                          : `${product.affiliateBps / 100}% when someone refers the buyer`,
-                      },
-                    ]
-                  : []),
-                { label: "Platform fee", value: `$${formatUsdc(cut(product.feeBps))}`, note: `${product.feeBps / 100}%` },
-                { label: "Network fee", value: "$0.00", note: "paid by the store" },
-                {
-                  label: "Creator",
-                  value: `$${formatUsdc(creatorGets)}`,
-                  note: by,
-                  total: true,
-                },
-              ]}
-            />
-            <p className="hint" style={{ marginTop: 14 }}>
-              The contract pays everyone in the same transaction as your purchase. Naira and cedi amounts are mid-market
-              estimates · <RatesCredit />
-            </p>
-          </div>
+            <Reveal className="detail-block">
+              <span className="mono detail-label">What's inside</span>
+              <div className="inside-chips">
+                <span className="chip-tag dot">{product.file.name}</span>
+                <span className="chip-tag dot">{fileSize(product.file.size)}</span>
+                <span className="chip-tag dot">{kind.one}</span>
+                <span className="chip-tag dot">Yours to keep</span>
+              </div>
+            </Reveal>
+            <Reveal className="detail-block" delay={100}>
+              <span className="mono detail-label">Where your ${formatUsdc(price)} goes</span>
+              <Spec
+                rows={[
+                  ...product.shares.map((s, i) => ({
+                    label: `Co-creator ${i + 1}`,
+                    value: `$${formatUsdc(cut(s.bps))}`,
+                    note: `${s.bps / 100}% · ${short(s.to)}`,
+                  })),
+                  ...(product.affiliateBps > 0
+                    ? [
+                        {
+                          label: "Affiliate",
+                          value: affiliate ? `$${formatUsdc(cut(product.affiliateBps))}` : "$0.00",
+                          note: affiliate
+                            ? `${product.affiliateBps / 100}% to ${short(affiliate)}, who sent you here`
+                            : `${product.affiliateBps / 100}% when someone refers the buyer`,
+                        },
+                      ]
+                    : []),
+                  { label: "Platform fee", value: `$${formatUsdc(cut(product.feeBps))}`, note: `${product.feeBps / 100}%` },
+                  { label: "Network fee", value: "$0.00", note: "paid by the store" },
+                  { label: "Creator", value: `$${formatUsdc(creatorGets)}`, note: by, total: true },
+                ]}
+              />
+            </Reveal>
+            <Reveal className="works-line" delay={150}>
+              <span className="mono">Pay with</span>
+              <strong>Passkey + Stellar wallets</strong>
+              <span className="hint">
+                The contract pays everyone in the same transaction as your purchase. Naira and cedi amounts are mid-market
+                estimates · <RatesCredit />
+              </span>
+            </Reveal>
 
-          {product.affiliateBps > 0 && !mine && (
-            <div>
-              <Eyebrow>Share and earn</Eyebrow>
-              <h3 style={{ fontSize: 34, marginTop: 14 }}>
-                Earn ${formatUsdc(cut(product.affiliateBps))} for every sale you send.
-              </h3>
-              <p className="lead">
-                {product.affiliateBps / 100}% of each sale through your link lands in your wallet the moment it happens.
-              </p>
-              {shareLink ? (
-                <div className="panel" style={{ borderColor: "var(--rule-light)" }}>
-                  <code>{shareLink}</code>
-                  <button className="text-link" onClick={() => copy(shareLink, "share")}>
-                    <Copy size={14} /> {copied === "share" ? "Copied" : "Copy your link"}
-                  </button>
-                </div>
-              ) : (
-                <p className="hint">Create a passkey wallet or connect a Stellar wallet above to get your link.</p>
-              )}
-            </div>
-          )}
+            {product.affiliateBps > 0 && !mine && (
+              <Reveal className="share-card">
+                <Eyebrow>Share and earn</Eyebrow>
+                <h3>Earn ${formatUsdc(cut(product.affiliateBps))} for every sale you send.</h3>
+                <p>{product.affiliateBps / 100}% of each sale through your link lands in your wallet the moment it happens.</p>
+                {shareLink ? (
+                  <div className="panel">
+                    <code>{shareLink}</code>
+                    <button className="text-link" onClick={() => copy(shareLink, "share")}>
+                      <Copy size={14} /> {copied === "share" ? "Copied" : "Copy your link"}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="hint">Create a passkey wallet or connect a Stellar wallet above to get your link.</p>
+                )}
+              </Reveal>
+            )}
+          </div>
         </div>
+
+        {more.length > 0 && (
+          <div className="container more">
+            <div className="bar">
+              <span className="eyebrow">More from the shelf</span>
+              <Link href="/shop" className="text-link">
+                All products →
+              </Link>
+            </div>
+            <div className="grid">
+              {more.map((p, i) => (
+                <Reveal key={p.id} delay={i * 90}>
+                  <ProductCard product={p} />
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
+
+      {receipts.length > 0 && (
+        <section className="band dark lined receipts">
+          <div className="container">
+            <div className="section-head">
+              <div>
+                <Reveal>
+                  <Eyebrow>Receipts</Eyebrow>
+                </Reveal>
+                <Headline lines={["Bought by", "real wallets."]} />
+              </div>
+              <Reveal delay={200} className="head-side">
+                <p className="lead">Each card is a purchase of this product, recorded on Stellar testnet.</p>
+              </Reveal>
+            </div>
+          </div>
+          <div className="wall">
+            {receipts.map((s, i) => (
+              <SaleCard key={s.txHash} sale={s} index={i} />
+            ))}
+          </div>
+        </section>
+      )}
     </>
   );
 }

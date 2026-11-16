@@ -21,6 +21,7 @@ import { decode, feeBumpRefusal, provenWallet, refusal, storeCall } from "./poli
 import { sessions } from "./session";
 import { sponsor as makeSponsor } from "./sponsor";
 import { connect } from "./sql";
+import { guessKind, isKind } from "../src/kinds";
 import { IMAGE_TYPES, imageType, UNTRUSTED } from "./uploads";
 
 const PORT = Number(process.env.PORT ?? 8790);
@@ -125,6 +126,7 @@ function publicProduct(row: ProductRow, chain: ChainProduct, profile?: Profile) 
     sales: chain.sales,
     file: { name: row.file_name, size: row.file_size, type: row.file_type },
     cover: row.cover_key ? `/api/products/${row.id}/cover` : null,
+    kind: isKind(row.kind) ? row.kind : guessKind(row.file_name),
     listedAt: row.created_at,
   };
 }
@@ -375,7 +377,7 @@ app.get("/api/creators/:id", async (c) => {
 app.post("/api/drafts", bodyLimit({ maxSize: MAX_FILE + MAX_COVER + 64 * 1024 }), async (c) => {
   if (!(await allow(c, "drafts", 20, HOUR))) return c.json({ error: "too many uploads, try again later" }, 429);
   const body = await c.req.parseBody();
-  const { creator, title, description, file, cover } = body;
+  const { creator, title, description, file, cover, kind } = body;
   if (!isSmartWallet(creator)) return c.json({ error: "creator must be a passkey wallet address" }, 400);
   if (!(await isOwner(c, creator))) return c.json({ error: "sign in with this wallet first" }, 403);
   if ((await db.pendingDrafts(creator)) >= MAX_PENDING_DRAFTS) {
@@ -383,6 +385,7 @@ app.post("/api/drafts", bodyLimit({ maxSize: MAX_FILE + MAX_COVER + 64 * 1024 })
   }
   if (typeof title !== "string" || !title.trim() || title.length > 120) return c.json({ error: "title: 1 to 120 characters" }, 400);
   if (typeof description !== "string" || description.length > 5000) return c.json({ error: "description: up to 5000 characters" }, 400);
+  if (kind !== undefined && kind !== "" && !isKind(kind)) return c.json({ error: "kind: pick one of the aisles" }, 400);
   if (!(file instanceof File) || file.size === 0) return c.json({ error: "add the file buyers will download" }, 400);
   if (file.size > MAX_FILE) return c.json({ error: `file is over ${MAX_FILE_MB} MB` }, 400);
   if (cover !== undefined && cover !== "" && !(cover instanceof File)) return c.json({ error: "cover must be an image" }, 400);
@@ -404,6 +407,7 @@ app.post("/api/drafts", bodyLimit({ maxSize: MAX_FILE + MAX_COVER + 64 * 1024 })
     file_size: file.size,
     cover_key: coverBytes ? await files.save(coverBytes) : null,
     cover_type: coverType,
+    kind: isKind(kind) ? kind : null,
     created_at: Date.now(),
   });
   return c.json({ draftId: id });
@@ -431,10 +435,11 @@ app.patch("/api/products/:id", async (c) => {
   const row = Number.isSafeInteger(id) ? await db.product(id) : undefined;
   if (!row) return c.json({ error: "product not found" }, 404);
   if (!(await isOwner(c, row.creator))) return c.json({ error: "sign in as this product's creator" }, 403);
-  const { title, description } = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const { title, description, kind } = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   if (typeof title !== "string" || !title.trim() || title.length > 120) return c.json({ error: "title: 1 to 120 characters" }, 400);
   if (typeof description !== "string" || description.length > 5000) return c.json({ error: "description: up to 5000 characters" }, 400);
-  await db.updateDetails(id, title.trim(), description.trim());
+  if (kind !== undefined && !isKind(kind)) return c.json({ error: "kind: pick one of the aisles" }, 400);
+  await db.updateDetails(id, title.trim(), description.trim(), isKind(kind) ? kind : null);
   return c.json({ ok: true });
 });
 
@@ -455,6 +460,31 @@ app.get("/api/sales", async (c) => {
       at: s.created_at,
     })),
   );
+});
+
+/** Public numbers for the home page, counted from the store's own sales records (each one is on chain). */
+app.get("/api/stats", async (c) => {
+  const sales = (await db.allSales()).filter((s) => !HIDDEN.has(s.product_id));
+  const shelf = (await withChain(await db.latest(48))).filter(onShelf);
+  const day = 24 * 60 * 60 * 1000;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  // Sales on each of the last seven UTC days, oldest first.
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const start = today.getTime() - (6 - i) * day;
+    return { day: start, sales: sales.filter((s) => s.created_at >= start && s.created_at < start + day).length };
+  });
+  const kinds: Record<string, number> = {};
+  for (const p of shelf) kinds[p.kind] = (kinds[p.kind] ?? 0) + 1;
+  return c.json({
+    sales: sales.length,
+    paid: sales.reduce((sum, s) => sum + BigInt(s.price ?? 0), 0n).toString(),
+    products: shelf.length,
+    shops: new Set(shelf.map((p) => p.creator)).size,
+    buyers: new Set((await db.recentSales(100_000)).filter((s) => !HIDDEN.has(s.product_id)).map((s) => s.buyer)).size,
+    week,
+    kinds,
+  });
 });
 
 // ---- products ----

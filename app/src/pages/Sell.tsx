@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { api, type Config } from "../api";
 import { formatUsdc, parseUsdc, read } from "../chain";
 import { STORE_ID } from "../config";
+import { KINDS } from "../kinds";
 import { Eyebrow, Receipt, Spec, Status, TagButton } from "../ui";
 import { short, useWallet } from "../useWallet";
 import { callStore } from "../wallet";
@@ -191,6 +192,19 @@ export function Sell() {
             <label>
               Title
               <input name="title" required maxLength={120} placeholder="Lagos Nights beat pack" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </label>
+            <label>
+              Aisle
+              <select name="kind" defaultValue="">
+                <option value="" disabled>
+                  What kind of file is it?
+                </option>
+                {KINDS.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               Description

@@ -13,6 +13,7 @@ export type Draft = {
   file_size: number;
   cover_key: string | null;
   cover_type: string | null;
+  kind: string | null;
   created_at: number;
 };
 
@@ -34,7 +35,7 @@ export type Birth = { credential_id: string; contract_id: string; tx_hash: strin
 
 export type PurchaseRow = ProductRow & { buyer: string; tx_hash: string; bought_at: number; paid: string | null };
 
-const COLUMNS = "id, creator, title, description, file_key, file_name, file_type, file_size, cover_key, cover_type, created_at";
+const COLUMNS = "id, creator, title, description, file_key, file_name, file_type, file_size, cover_key, cover_type, kind, created_at";
 
 async function migrate(sql: Sql) {
   const blob = sql.dialect === "postgres" ? "bytea" : "blob";
@@ -65,6 +66,11 @@ async function migrate(sql: Sql) {
   for (const s of statements) await sql.exec(s);
   // Databases from before purchases kept the price paid.
   if (sql.dialect === "sqlite") await sql.exec("alter table purchases add column price text").catch(() => {});
+  // Databases from before products had a kind (the aisle a creator lists it in).
+  for (const table of ["drafts", "products"]) {
+    if (sql.dialect === "postgres") await sql.exec(`alter table ${table} add column if not exists kind text`);
+    else await sql.exec(`alter table ${table} add column kind text`).catch(() => {});
+  }
 }
 
 const placeholders = (n: number) => Array.from({ length: n }, () => "?").join(", ");
@@ -78,9 +84,9 @@ export async function openDb(sql: Sql) {
     sql,
 
     addDraft: (d: Draft) =>
-      sql.run(`insert into drafts (${COLUMNS}) values (${placeholders(11)})`, [
+      sql.run(`insert into drafts (${COLUMNS}) values (${placeholders(12)})`, [
         d.id, d.creator, d.title, d.description, d.file_key, d.file_name, d.file_type, d.file_size,
-        d.cover_key, d.cover_type, d.created_at,
+        d.cover_key, d.cover_type, d.kind, d.created_at,
       ]),
     draft: (id: string) => sql.get<Draft>("select * from drafts where id = ?", [id]),
     pendingDrafts: async (creator: string) =>
@@ -105,9 +111,9 @@ export async function openDb(sql: Sql) {
     /** Moves a draft to the published product with this on-chain id. */
     async publish(draft: Draft, productId: number): Promise<ProductRow> {
       const row: ProductRow = { ...draft, id: productId, created_at: Date.now() };
-      await sql.run(`insert into products (${COLUMNS}) values (${placeholders(11)})`, [
+      await sql.run(`insert into products (${COLUMNS}) values (${placeholders(12)})`, [
         row.id, row.creator, row.title, row.description, row.file_key, row.file_name, row.file_type, row.file_size,
-        row.cover_key, row.cover_type, row.created_at,
+        row.cover_key, row.cover_type, row.kind, row.created_at,
       ]);
       await sql.run("delete from drafts where id = ?", [draft.id]);
       return row;
@@ -115,8 +121,8 @@ export async function openDb(sql: Sql) {
     product: (id: number) => sql.get<ProductRow>("select * from products where id = ?", [id]),
     productsBy: (creator: string) => sql.all<ProductRow>("select * from products where creator = ? order by id desc", [creator]),
     latest: (n: number) => sql.all<ProductRow>("select * from products order by id desc limit ?", [n]),
-    updateDetails: (id: number, title: string, description: string) =>
-      sql.run("update products set title = ?, description = ? where id = ?", [title, description, id]),
+    updateDetails: (id: number, title: string, description: string, kind: string | null) =>
+      sql.run("update products set title = ?, description = ?, kind = coalesce(?, kind) where id = ?", [title, description, kind, id]),
 
     addPurchase: (productId: number, buyer: string, txHash: string, price: string | null) =>
       sql.run(
@@ -143,6 +149,13 @@ export async function openDb(sql: Sql) {
          from purchases s join products p on p.id = s.product_id
          ${creator ? "where p.creator = ?" : ""} order by s.created_at desc limit ?`,
         creator ? [creator, n] : [n],
+      ),
+
+    /** Totals for the public numbers: every sale through the store, by product, with its time and price. */
+    allSales: () =>
+      sql.all<{ product_id: number; price: string | null; created_at: number; creator: string }>(
+        `select s.product_id, s.price, s.created_at, p.creator
+         from purchases s join products p on p.id = s.product_id`,
       ),
 
     profile: (wallet: string) => sql.get<Profile>("select * from profiles where wallet = ?", [wallet]),

@@ -2,7 +2,8 @@ import { Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { api, type Shop as ShopData } from "../api";
-import { explorerAccount, Eyebrow, ProductCard, Status } from "../ui";
+import { ShelfPage } from "../shelf";
+import { explorerAccount, Status } from "../ui";
 import { short } from "../useWallet";
 
 /** A creator's own shop page: their name, a short bio and everything they sell. */
@@ -21,11 +22,11 @@ export function Shop({ id }: { id: string }) {
 
   if (missing) {
     return (
-      <section className="band dark">
+      <section className="band dark lined page-hero">
         <div className="container">
           <h1>No shop here.</h1>
-          <Link href="/" className="text-link">
-            Back to the store
+          <Link href="/shop" className="text-link">
+            Back to the shelf
           </Link>
         </div>
       </section>
@@ -33,7 +34,7 @@ export function Shop({ id }: { id: string }) {
   }
   if (!shop) {
     return (
-      <section className="band dark">
+      <section className="band dark lined page-hero">
         <div className="container">
           <Status>Loading the shop</Status>
         </div>
@@ -46,37 +47,32 @@ export function Shop({ id }: { id: string }) {
   const link = `${window.location.origin}/c/${shop.profile?.handle ?? shop.wallet}`;
 
   return (
-    <>
-      <section className="band dark lined tight">
-        <div className="container">
-          <Eyebrow>{shop.profile?.handle ? `@${shop.profile.handle}` : "Shop"}</Eyebrow>
-          <h1 data-testid="shop-name">{name}</h1>
-          {shop.profile?.bio && <p className="lead">{shop.profile.bio}</p>}
-          <p className="hint mono" style={{ marginTop: 18 }}>
-            {shop.products.length} product{shop.products.length === 1 ? "" : "s"} · {sold} sold · paid to{" "}
-            <a href={explorerAccount(shop.wallet)} target="_blank" rel="noreferrer">
-              {short(shop.wallet)}
-            </a>{" "}
-            ·{" "}
-            <button className="text-link" onClick={() => navigator.clipboard.writeText(link).then(() => setCopied(true))}>
-              <Copy size={13} /> {copied ? "Copied" : "Copy shop link"}
-            </button>
-          </p>
-        </div>
-      </section>
-      <section className="band dark">
-        <div className="container">
-          {shop.products.length === 0 ? (
-            <div className="empty">Nothing on this shelf yet.</div>
-          ) : (
-            <div className="grid">
-              {shop.products.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </>
+    <ShelfPage
+      crumbs={[{ label: "Home", href: "/" }, { label: "Shop", href: "/shop" }, { label: name }]}
+      eyebrow={shop.profile?.handle ? `@${shop.profile.handle}` : "A creator's shop"}
+      title={[name]}
+      titleTestId="shop-name"
+      lead={shop.profile?.bio || undefined}
+      stats={[
+        { n: shop.products.length, label: shop.products.length === 1 ? "Product" : "Products" },
+        { n: sold, label: "Sold" },
+        { n: new Set(shop.products.map((p) => p.kind)).size, label: "Aisles" },
+      ]}
+      extra={
+        <p className="hint mono shop-links">
+          Paid to{" "}
+          <a href={explorerAccount(shop.wallet)} target="_blank" rel="noreferrer">
+            {short(shop.wallet)}
+          </a>{" "}
+          ·{" "}
+          <button className="text-link" onClick={() => navigator.clipboard.writeText(link).then(() => setCopied(true))}>
+            <Copy size={13} /> {copied ? "Copied" : "Copy shop link"}
+          </button>
+        </p>
+      }
+      products={shop.products}
+      listTitle={["Everything", "in this shop."]}
+      empty="Nothing on this shelf yet."
+    />
   );
 }

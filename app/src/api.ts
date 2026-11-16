@@ -14,6 +14,7 @@ export type Product = {
   sales: number;
   file: { name: string; size: number; type: string };
   cover: string | null;
+  kind: string;
   listedAt: number;
 };
 
@@ -38,6 +39,17 @@ export type Profile = { name: string; bio: string; handle: string | null };
 export type Shop = { wallet: string; profile: Profile | null; products: Product[] };
 
 export type Rates = { NGN: number; GHS: number; updated: string; source: string };
+
+/** Public numbers, counted from the store's sales records. `paid` is in USDC smallest units. */
+export type Stats = {
+  sales: number;
+  paid: string;
+  products: number;
+  shops: number;
+  buyers: number;
+  week: { day: number; sales: number }[];
+  kinds: Record<string, number>;
+};
 
 export type Config = { network: string; maxFileMb: number; faucet: boolean; sponsor: string; store: string };
 
@@ -65,9 +77,10 @@ export const api = {
     fetch(creator ? `/api/products?creator=${encodeURIComponent(creator)}` : "/api/products").then((r) => json<Product[]>(r)),
   sales: (creator?: string) =>
     fetch(creator ? `/api/sales?creator=${encodeURIComponent(creator)}` : "/api/sales").then((r) => json<Sale[]>(r)),
+  stats: () => fetch("/api/stats").then((r) => json<Stats>(r)),
   product: (id: string | number) => fetch(`/api/products/${id}`).then((r) => json<Product>(r)),
-  updateProduct: (id: number, title: string, description: string) =>
-    send("PATCH", `/api/products/${id}`, { title, description }).then((r) => json<{ ok: true }>(r)),
+  updateProduct: (id: number, title: string, description: string, kind?: string) =>
+    send("PATCH", `/api/products/${id}`, { title, description, kind }).then((r) => json<{ ok: true }>(r)),
   /** The download link if a wallet proven in this browser owns the product. */
   access: (id: string | number) => fetch(`/api/products/${id}/access`).then((r) => json<Access>(r)),
   library: () => fetch("/api/library").then((r) => json<{ wallets: string[]; items: LibraryItem[] }>(r)),
