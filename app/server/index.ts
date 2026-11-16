@@ -22,6 +22,7 @@ import { sessions } from "./session";
 import { sponsor as makeSponsor } from "./sponsor";
 import { connect } from "./sql";
 import { guessKind, isKind } from "../src/kinds";
+import { checkPayout, parsePayout } from "../src/payout";
 import { IMAGE_TYPES, imageType, UNTRUSTED } from "./uploads";
 
 const PORT = Number(process.env.PORT ?? 8790);
@@ -359,6 +360,47 @@ app.put("/api/profile", async (c) => {
   const profile = { wallet, name: name.trim(), bio: bio.trim(), handle: h, updated_at: Date.now() };
   await db.saveProfile(profile);
   return c.json(profile);
+});
+
+// ---- creators: where payouts go (only the signed-in creator can see or change it) ----
+
+const ownerOnly = async (c: Context, wallet: unknown) => {
+  if (!isSmartWallet(wallet)) return c.json({ error: "wallet must be a passkey wallet" }, 400);
+  if (!(await isOwner(c, wallet))) return c.json({ error: "sign in with this wallet first" }, 403);
+  return null;
+};
+
+app.get("/api/payout/:wallet", async (c) => {
+  const wallet = c.req.param("wallet");
+  const refused = await ownerOnly(c, wallet);
+  if (refused) return refused;
+  const row = await db.payout(wallet);
+  const payout = row ? parsePayout(row.address) : null;
+  return c.json({ payout: payout && !("error" in payout) ? payout : null });
+});
+
+app.put("/api/payout", async (c) => {
+  const { wallet, address, memo = "" } = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const refused = await ownerOnly(c, wallet);
+  if (refused) return refused;
+  if (typeof address !== "string" || address.length > 100 || typeof memo !== "string" || memo.length > 40) {
+    return c.json({ error: "address and memo must be short text" }, 400);
+  }
+  const payout = parsePayout(address, memo);
+  if ("error" in payout) return c.json({ error: payout.error }, 400);
+  const checked = await checkPayout(payout.account).catch(() => null);
+  if (!checked) return c.json({ error: "Could not reach Stellar to check that account. Try again." }, 502);
+  if (!checked.ok) return c.json({ error: checked.problem }, 422);
+  await db.savePayout({ wallet: wallet as string, address: payout.address, updated_at: Date.now() });
+  return c.json({ payout });
+});
+
+app.delete("/api/payout/:wallet", async (c) => {
+  const wallet = c.req.param("wallet");
+  const refused = await ownerOnly(c, wallet);
+  if (refused) return refused;
+  await db.deletePayout(wallet);
+  return c.json({ ok: true });
 });
 
 app.get("/api/creators/:id", async (c) => {

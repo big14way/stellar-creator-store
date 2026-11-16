@@ -351,6 +351,45 @@ async function main() {
   const libHref = (await buyer2.page.getByTestId("library-download").first().getAttribute("href"))!;
   const libGot = await buyer2.page.request.get(`${APP}${libHref}`);
   check(createHash("sha256").update(await libGot.body()).digest("hex") === fileHash, "the library downloads the file on a new device");
+
+  console.log("== creator pays out to a wallet they own");
+  // A fresh classic account that can't hold USDC yet: saving it is refused, with the reason.
+  const payName = `cs-pay-${Date.now()}`;
+  cli("keys", "generate", payName, "--network", "testnet", "--fund");
+  const payTo = addr(payName);
+  await c2.getByTestId("payout-address").waitFor({ timeout: 60_000 }).catch(() => failWith(c2, "payout card not shown"));
+  await c2.getByTestId("payout-address").fill(payTo);
+  await c2.getByTestId("payout-save").click();
+  await c2.getByTestId("payout-error").waitFor({ timeout: 60_000 }).catch(() => failWith(c2, "no reason given for an account without USDC"));
+  check(
+    (await c2.getByTestId("payout-error").textContent())?.includes("does not hold USDC") ?? false,
+    "a payout account that can't hold USDC is refused, with the reason",
+  );
+  ensureUsdc(payName, 0n); // the creator adds USDC in their wallet app
+  await c2.getByTestId("payout-save").click();
+  await c2.getByTestId("payout-saved").waitFor({ timeout: 60_000 }).catch(() => failWith(c2, "payout address not saved"));
+  check((await c2.getByTestId("payout-saved").getAttribute("title")) === payTo, "the creator saves their own Stellar wallet for payouts");
+  check((await stranger.request.get(`${APP}/api/payout/${creator}`)).status() === 403, "nobody else can read the payout address");
+  await c2.getByTestId("payout-amount").fill("1");
+  await c2.getByTestId("payout-send").click();
+  await c2.getByTestId("payout-sent").waitFor({ timeout: LONG }).catch(() => failWith(c2, "payout failed"));
+  check(balance(USDC_ID, payTo) === ONE, "1 USDC reached the payout wallet");
+
+  // The same account as an exchange deposit with a number memo: sent as one M-address, credited to the account.
+  await c2.getByTestId("payout-edit").click();
+  await c2.getByTestId("payout-mode-exchange").click();
+  await c2.getByTestId("payout-memo-input").fill("4242");
+  await c2.getByTestId("payout-save").click();
+  await c2.getByTestId("payout-memo").waitFor({ timeout: 60_000 }).catch(() => failWith(c2, "exchange deposit not saved"));
+  check((await c2.getByTestId("payout-memo").textContent()) === "4242", "an exchange deposit is saved with its memo");
+  await c2.getByTestId("payout-amount").fill("0.5");
+  await c2.getByTestId("payout-send").click();
+  await c2.getByTestId("payout-sent").waitFor({ timeout: LONG }).catch(() => failWith(c2, "payout to the exchange deposit failed"));
+  check(balance(USDC_ID, payTo) === ONE + ONE / 2n, "0.5 USDC sent to the M-address reached the account under it");
+  if (process.env.SHOTS) {
+    await c2.getByTestId("payout").screenshot({ path: `${process.env.SHOTS}/payout-card.png` });
+    await c2.getByTestId("cashout-guide").screenshot({ path: `${process.env.SHOTS}/cashout-guide.png` });
+  }
   await browser.close();
 
   console.log("== on chain");
@@ -359,7 +398,10 @@ async function main() {
     read(STORE_ID, "has_purchased", "--product_id", productId, "--buyer", gKey.publicKey()) === "true",
     "receipt recorded for the Stellar wallet buyer",
   );
-  check(balance(USDC_ID, creator) === (price * 65n) / 100n + (price * 75n) / 100n, "creator holds 4.20 USDC");
+  check(
+    balance(USDC_ID, creator) === (price * 65n) / 100n + (price * 75n) / 100n - (ONE + ONE / 2n),
+    "creator holds 4.20 USDC less the 1.50 paid out",
+  );
   check(balance(USDC_ID, affiliate) - affiliateBefore === price / 10n, "affiliate received 0.30 USDC, only for the referred sale");
   check(balance(USDC_ID, buyer) === 7n * ONE, "passkey buyer has 7 of the 10 test USDC left");
   check(balance(USDC_ID, gKey.publicKey()) === 7n * ONE, "Stellar wallet buyer has 7 of the 10 test USDC left");

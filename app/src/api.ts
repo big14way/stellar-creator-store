@@ -1,3 +1,5 @@
+import type { Payout } from "./payout";
+
 export type CreatorRef = { name: string; handle: string | null } | null;
 
 export type Product = {
@@ -86,6 +88,12 @@ export const api = {
   library: () => fetch("/api/library").then((r) => json<{ wallets: string[]; items: LibraryItem[] }>(r)),
   shop: (id: string) => fetch(`/api/creators/${encodeURIComponent(id)}`).then((r) => json<Shop>(r)),
   saveProfile: (wallet: string, p: Profile) => send("PUT", "/api/profile", { wallet, ...p }).then((r) => json<Profile>(r)),
+  /** The signed-in creator's payout address, or null when none is saved. */
+  payout: (wallet: string) => fetch(`/api/payout/${wallet}`).then((r) => json<{ payout: Payout | null }>(r)),
+  /** Checks the address on Stellar (exists, holds USDC) and saves it. */
+  savePayout: (wallet: string, address: string, memo: string) =>
+    send("PUT", "/api/payout", { wallet, address, memo }).then((r) => json<{ payout: Payout }>(r)),
+  removePayout: (wallet: string) => fetch(`/api/payout/${wallet}`, { method: "DELETE" }).then((r) => json<{ ok: true }>(r)),
   draft: (form: FormData) => fetch("/api/drafts", { method: "POST", body: form }).then((r) => json<{ draftId: string }>(r)),
   publish: (draftId: string, productId: number) =>
     send("POST", `/api/drafts/${draftId}/publish`, { productId }).then((r) => json<Product>(r)),

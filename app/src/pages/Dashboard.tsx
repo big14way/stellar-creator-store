@@ -1,10 +1,11 @@
-import { ArrowRight, Banknote, Copy, ExternalLink, Fingerprint, Pause, Pencil, Play, Send, Tag } from "lucide-react";
+import { ArrowRight, Banknote, Check, Copy, ExternalLink, Fingerprint, Pause, Pencil, Play, Send, Tag } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "wouter";
 import { anchorSignIn, sendUsdc, startWithdrawal, STATUS_TEXT, withdrawal, payee, type AnchorTx } from "../anchor";
 import { api, shopPath, type Product, type Profile, type Sale } from "../api";
 import { formatUsdc, owedTo, parseUsdc, usdcBalance } from "../chain";
-import { ANCHOR_DOMAIN } from "../config";
+import { ANCHOR_DOMAIN, NETWORK } from "../config";
+import { checkPayout, parsePayout, type Payout, type PayoutCheck } from "../payout";
 import { ago, explorerTx, Eyebrow, fileKind, Local, RatesCredit, Receipt, Status, TagButton, TagLink } from "../ui";
 import { short, useWallet } from "../useWallet";
 import { callStore } from "../wallet";
@@ -258,16 +259,19 @@ export function Dashboard() {
         </div>
       </section>
 
-      <section className="band dark tight">
+      <section className="band dark tight" id="payout">
         <div className="container two-col">
+          <PayoutCard wallet={wallet} balance={balance} onSent={() => load(wallet)} />
+          <CashOutGuide balance={balance} />
+        </div>
+        <div className="container two-col payout-more">
           {ANCHOR_DOMAIN ? (
             <CashOut wallet={wallet} balance={balance} onDone={() => load(wallet)} />
           ) : (
             <div className="side-card">
-              <Eyebrow>Cash out to a bank</Eyebrow>
+              <Eyebrow>Cash out through an anchor</Eyebrow>
               <p className="hint">
-                No naira anchor on this network accepts passkey wallets yet. Send USDC to your own Stellar wallet or exchange
-                and cash out there.
+                No naira or cedi anchor accepts passkey wallets yet. Use your payout wallet above and cash out from there.
               </p>
             </div>
           )}
@@ -498,6 +502,337 @@ function ProfileCard({ wallet }: { wallet: string }) {
   );
 }
 
+// ---- payout wallet: a Stellar account the creator holds the keys to, checked before it is saved ----
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+function PayoutCard({ wallet, balance, onSent }: { wallet: string; balance: bigint | null; onSent: () => void }) {
+  const [saved, setSaved] = useState<Payout | null | undefined>(undefined);
+  const [status, setStatus] = useState<PayoutCheck | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<"wallet" | "exchange">("wallet");
+  const [address, setAddress] = useState("");
+  const [memo, setMemo] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setSaved(undefined);
+    api.payout(wallet).then(
+      (r) => live && setSaved(r.payout),
+      () => live && setSaved(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [wallet]);
+
+  // A saved account can lose its USDC trustline later, so check it again whenever it is shown.
+  useEffect(() => {
+    let live = true;
+    setStatus(null);
+    if (saved) checkPayout(saved.account).then((c) => live && setStatus(c), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [saved]);
+
+  const memoUsed = mode === "exchange" ? memo : "";
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const typed = parsePayout(address, memoUsed);
+    if ("error" in typed) return setError(typed.error);
+    setBusy("Checking on Stellar…");
+    try {
+      const { payout } = await api.savePayout(wallet, address, memoUsed);
+      setSaved(payout);
+      setEditing(false);
+      setSent(null);
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendOut(e: FormEvent) {
+    e.preventDefault();
+    if (!saved) return;
+    setError(null);
+    setSent(null);
+    try {
+      const units = amount.trim() ? parseUsdc(amount) : (balance ?? 0n);
+      if (units <= 0n) throw new Error("Nothing to send yet.");
+      if (balance !== null && units > balance) throw new Error("That's more than your balance.");
+      setBusy("Checking the account…");
+      const check = await checkPayout(saved.account);
+      setStatus(check);
+      if (!check.ok) throw new Error(check.problem);
+      setBusy("Confirm with your passkey…");
+      setSent(await sendUsdc(wallet, saved.address, units));
+      setAmount("");
+      onSent();
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function edit() {
+    if (saved) {
+      setMode(saved.memoId ? "exchange" : "wallet");
+      setAddress(saved.account);
+      setMemo(saved.memoId ?? "");
+    }
+    setError(null);
+    setEditing(true);
+  }
+
+  async function remove() {
+    setError(null);
+    try {
+      await api.removePayout(wallet);
+      setSaved(null);
+      setAddress("");
+      setMemo("");
+    } catch (err) {
+      setError(message(err));
+    }
+  }
+
+  const all = balance !== null && balance > 0n ? `Send all $${formatUsdc(balance)}` : "Send";
+  const typedUnits = (() => {
+    try {
+      return amount.trim() ? parseUsdc(amount) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  return (
+    <div className="side-card payout" data-testid="payout">
+      <Eyebrow>Payout wallet</Eyebrow>
+      <h3 className="side-title">Your money, your wallet.</h3>
+      <p className="hint">
+        Send your USDC to a Stellar wallet you hold the keys to, then cash out to naira or cedis from there. Paperstall
+        never holds or converts your money.
+      </p>
+      {saved === undefined ? (
+        <p className="hint">Loading…</p>
+      ) : saved && !editing ? (
+        <Receipt className="payout-receipt">
+          <div className="receipt-head">
+            <span>{saved.memoId ? "Exchange deposit" : "Your Stellar wallet"}</span>
+            <span className={status && !status.ok ? "verified bad" : "verified"} data-testid="payout-status">
+              {!status ? "Checking" : status.ok ? "Holds USDC" : "Can't receive USDC"}
+            </span>
+          </div>
+          <dl className="payout-rows">
+            <div>
+              <dt>Account</dt>
+              <dd title={saved.account} data-testid="payout-saved">
+                {short(saved.account)}
+              </dd>
+            </div>
+            {saved.memoId && (
+              <div>
+                <dt>Memo</dt>
+                <dd data-testid="payout-memo">{saved.memoId}</dd>
+              </div>
+            )}
+            {saved.memoId && (
+              <div>
+                <dt>Sent as</dt>
+                <dd title={saved.address}>{short(saved.address)}</dd>
+              </div>
+            )}
+          </dl>
+          {status && !status.ok && <p className="payout-warn">{status.problem}</p>}
+          {saved.memoId && (
+            <p className="payout-warn">
+              Experimental: exchanges have not confirmed that they credit USDC sent from smart wallets. Send $1 first and
+              check that it arrives.
+            </p>
+          )}
+          <form className="form payout-send" onSubmit={sendOut}>
+            <label>
+              Amount in USDC
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                inputMode="decimal"
+                placeholder={balance !== null ? formatUsdc(balance) : "0"}
+                data-testid="payout-amount"
+              />
+              {(typedUnits ?? balance) ? <Local usdc={(typedUnits ?? balance)!} className="hint" /> : null}
+            </label>
+            <TagButton type="submit" disabled={!!busy || balance === 0n} icon={<Send size={16} />} data-testid="payout-send">
+              {busy ?? (amount.trim() ? `Send $${amount.trim()}` : all)}
+            </TagButton>
+          </form>
+          {sent && (
+            <a className="text-link" href={explorerTx(sent)} target="_blank" rel="noreferrer" data-testid="payout-sent">
+              Sent. View the transaction <ExternalLink size={12} />
+            </a>
+          )}
+          <p className="payout-actions">
+            <button type="button" className="text-link" onClick={edit} data-testid="payout-edit">
+              Change
+            </button>
+            <span aria-hidden="true">·</span>
+            <button type="button" className="text-link" onClick={remove}>
+              Remove
+            </button>
+          </p>
+        </Receipt>
+      ) : (
+        <form className="form" onSubmit={save}>
+          <div className="seg" role="radiogroup" aria-label="Where your USDC goes">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === "wallet"}
+              className={mode === "wallet" ? "on" : ""}
+              onClick={() => setMode("wallet")}
+              data-testid="payout-mode-wallet"
+            >
+              My Stellar wallet
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === "exchange"}
+              className={mode === "exchange" ? "on" : ""}
+              onClick={() => setMode("exchange")}
+              data-testid="payout-mode-exchange"
+            >
+              Exchange deposit
+            </button>
+          </div>
+          <label>
+            {mode === "wallet" ? "Wallet address" : "Deposit address"}
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="G…"
+              spellCheck={false}
+              autoComplete="off"
+              data-testid="payout-address"
+            />
+            <span className="hint">
+              {mode === "wallet"
+                ? "From LOBSTR, Freighter or any Stellar wallet you hold the keys to. It needs USDC added."
+                : "Your exchange's USDC deposit address on the Stellar network."}
+            </span>
+          </label>
+          {mode === "exchange" && (
+            <label>
+              Memo
+              <input value={memo} onChange={(e) => setMemo(e.target.value)} inputMode="numeric" data-testid="payout-memo-input" />
+              <span className="hint">The number the exchange shows with the address. Experimental: send $1 first.</span>
+            </label>
+          )}
+          <TagButton type="submit" disabled={!!busy} icon={<Check size={16} />} data-testid="payout-save">
+            {busy ?? "Check and save"}
+          </TagButton>
+          {saved && (
+            <button type="button" className="text-link" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          )}
+        </form>
+      )}
+      {error && (
+        <p className="error" data-testid="payout-error">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---- from the payout wallet to naira or cedis: the routes that work today, and their limits ----
+
+function CashOutGuide({ balance }: { balance: bigint | null }) {
+  const [country, setCountry] = useState<"ng" | "gh">("ng");
+  return (
+    <div className="side-card guide" data-testid="cashout-guide">
+      <Eyebrow>Cash out to naira or cedis</Eyebrow>
+      <h3 className="side-title">From your wallet to your bank.</h3>
+      <p className="hint">
+        No Stellar service pays naira or cedis for USDC straight from a passkey wallet yet. These routes work from your own
+        wallet today.
+        {balance ? (
+          <>
+            {" "}
+            Your balance is <Local usdc={balance} /> before fees.
+          </>
+        ) : null}
+      </p>
+      <div className="seg" role="tablist" aria-label="Country">
+        <button type="button" role="tab" aria-selected={country === "ng"} className={country === "ng" ? "on" : ""} onClick={() => setCountry("ng")}>
+          Nigeria
+        </button>
+        <button type="button" role="tab" aria-selected={country === "gh"} className={country === "gh" ? "on" : ""} onClick={() => setCountry("gh")}>
+          Ghana
+        </button>
+      </div>
+      {country === "ng" ? (
+        <>
+          <ol className="guide-steps">
+            <li>
+              <strong>Verify on Busha.</strong> Naira withdrawals need its Level 2 verification.
+            </li>
+            <li>
+              <strong>Get a USDC deposit address.</strong> Choose USDC on the Stellar network and copy the address and memo.
+            </li>
+            <li>
+              <strong>Send your USDC there.</strong> From your own wallet with that memo, or save it here as an exchange
+              deposit (experimental).
+            </li>
+            <li>
+              <strong>Sell for naira</strong> and withdraw to your bank account.
+            </li>
+          </ol>
+          <p className="guide-note">
+            Busha lists USDC on Stellar for deposits. Check in its app that it sells USDC for naira before you send a large
+            amount. Busha is not a Paperstall partner.
+          </p>
+        </>
+      ) : (
+        <>
+          <ol className="guide-steps">
+            <li>
+              <strong>Use LOBSTR as your payout wallet.</strong> Add USDC in LOBSTR, save its address here and send.
+            </li>
+            <li>
+              <strong>Withdraw with MoneyGram</strong> inside LOBSTR: cash pickup, 1 to 2,500 USDC at a time.
+            </li>
+            <li>
+              <strong>Collect cedis</strong> at a MoneyGram agent with your ID.
+            </li>
+          </ol>
+          <p className="guide-note">
+            Cash pickup, not mobile money, and exchange-rate costs may apply. MoneyGram is not a Paperstall partner.
+          </p>
+        </>
+      )}
+      {NETWORK === "testnet" && (
+        <p className="guide-note">
+          This site runs on Stellar testnet. Its USDC is test money that no exchange accepts; the steps are the same on
+          mainnet.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---- send USDC anywhere on Stellar ----
 
 function SendUsdc({ wallet, balance, onSent }: { wallet: string; balance: bigint | null; onSent: () => void }) {
@@ -528,8 +863,8 @@ function SendUsdc({ wallet, balance, onSent }: { wallet: string; balance: bigint
 
   return (
     <div className="side-card">
-      <Eyebrow>Send USDC</Eyebrow>
-      <p className="hint">To your LOBSTR or exchange wallet, or anyone on Stellar. We pay the network fee.</p>
+      <Eyebrow>Send USDC to anyone</Eyebrow>
+      <p className="hint">Any Stellar address, G…, C… or M…. We pay the network fee.</p>
       <form className="form" onSubmit={send}>
         <label>
           To
@@ -625,11 +960,12 @@ function CashOut({ wallet, balance, onDone }: { wallet: string; balance: bigint 
 
   return (
     <div className="side-card cashout" data-testid="cashout">
-      <Eyebrow>Cash out to a bank</Eyebrow>
-      <h3 style={{ fontSize: 30, margin: "12px 0" }}>Dollars in, naira out.</h3>
+      <Eyebrow>Anchor cash-out · test</Eyebrow>
+      <h3 style={{ fontSize: 30, margin: "12px 0" }}>The anchor flow, rehearsed.</h3>
       <p className="hint">
-        A Stellar anchor pays your bank and takes USDC from your wallet. You sign in to it with your passkey (SEP-45) and
-        fill in your bank details on the anchor's own page (SEP-24); Paperstall never sees them.
+        Stellar's test anchor plays the bank. You sign in to it with your passkey (SEP-45), fill in its own form (SEP-24)
+        and it takes test USDC from your wallet. No real bank is paid. When a naira anchor accepts passkey wallets, cash-out
+        works exactly like this.
       </p>
       {step.at === "idle" && (
         <div className="form" style={{ marginTop: 14 }}>

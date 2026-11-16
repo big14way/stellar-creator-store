@@ -3366,3 +3366,166 @@ html.menu-open {
   justify-content: flex-end;
   padding-right: 18%;
 }
+
+/* ---------- dashboard: payout wallet and the cash-out guide ---------- */
+
+.side-title {
+  margin: 4px 0 2px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.payout-more {
+  margin-top: 48px;
+}
+
+.seg {
+  display: inline-flex;
+  justify-self: start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--rule-dark);
+  border-radius: 999px;
+}
+
+.seg button {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--on-dark);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 0.3s,
+    color 0.3s;
+}
+
+.seg button.on {
+  background: var(--cream);
+  color: var(--ink);
+}
+
+.payout-receipt {
+  margin-top: 6px;
+}
+
+.payout-receipt .verified.bad {
+  color: var(--bad);
+}
+
+.payout-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.payout-rows div {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
+}
+
+.payout-rows dt {
+  color: var(--on-light-dim);
+}
+
+.payout-rows dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.payout-warn {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--rust);
+  background: rgb(176 75 32 / 0.08);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.payout-receipt .form label {
+  color: var(--ink);
+}
+
+.payout-receipt .form input {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--rule-light);
+}
+
+.payout-receipt .hint,
+.payout-receipt .local {
+  color: var(--on-light-dim);
+}
+
+.payout-receipt .text-link {
+  color: var(--ink);
+}
+
+.payout-send {
+  margin-top: 0;
+}
+
+.payout-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.guide-steps {
+  display: grid;
+  gap: 12px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.guide-steps li {
+  position: relative;
+  padding-left: 40px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--on-dark);
+  counter-increment: step;
+}
+
+.guide-steps li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--orange);
+}
+
+.guide-steps strong {
+  color: var(--cream);
+}
+
+.guide-note {
+  margin: 6px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule-dark);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-dark-dim);
+}
+
+@media (max-width: 960px) {
+  .payout-more {
+    margin-top: 0;
+  }
+}

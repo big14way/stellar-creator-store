@@ -485,7 +485,7 @@ const STEPS = [
   { who: "Store", title: "The store pays the fee", text: "A fee sponsor covers the network fee under strict rules, so nobody needs XLM." },
   { who: "Contract", title: "The contract splits it", text: "Creator, co-creators, affiliate and the platform fee, in one Soroban call." },
   { who: "Server", title: "The receipt unlocks the file", text: "The server checks the sale on chain, then serves the download and a private link." },
-  { who: "Creator", title: "Cash out when you want", text: "Keep dollars, send them anywhere on Stellar, or withdraw through an anchor." },
+  { who: "Creator", title: "Cash out when you want", text: "Keep dollars, or send them to your own wallet or exchange and cash out to naira or cedis there." },
 ];
 
 function Steps() {
@@ -866,7 +866,7 @@ function Faq({ feeBps, maxFileMb }: { feeBps: number; maxFileMb: number }) {
     },
     {
       q: "How do creators cash out?",
-      a: "Keep dollars in the wallet, send them to any Stellar address, or withdraw through a Stellar anchor (SEP-24). On testnet that is the SDF test anchor, so payouts are simulated.",
+      a: "Save a payout wallet you own, such as LOBSTR or an exchange deposit, and send your USDC there in one tap; Paperstall checks it can hold USDC first. From there, Busha pays naira to Nigerian banks and MoneyGram pays cedis in cash in Ghana. No Stellar anchor pays naira straight from a passkey wallet yet, so the anchor flow runs on Stellar's test anchor and its bank payout is simulated.",
     },
     {
       q: "Can I split sales with collaborators?",
@@ -934,7 +934,7 @@ const NOTES = [
   {
     tag: "Cash out",
     title: "Naira and cedis: what works today",
-    text: "Anchors, SEP-24 and what is still simulated on testnet.",
+    text: "Payout wallets, the exchanges that pay out, and what is still simulated.",
     href: `${REPO}#cash-out-honestly`,
     photo: "photo-cash",
   },

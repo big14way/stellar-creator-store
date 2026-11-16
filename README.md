@@ -36,7 +36,8 @@ Creators in Nigeria and Ghana (designers, tutors, coders, musicians) earn by sel
 | **A library on any device** | Buyers sign in with the passkey or Stellar wallet they paid with and find everything they bought. |
 | **Shops** | Each creator gets a shop page (`/c/yourname`) with their name, bio and products. |
 | **Dashboard** | Balance with a naira and cedi estimate, every sale with its transaction, edit, reprice or pause products, pay out co-creators' held shares, send USDC anywhere. |
-| **Cash out** | Sign in to a Stellar anchor with the passkey wallet (SEP-45), fill in bank details on the anchor's own page (SEP-24), and send it the USDC. |
+| **Payout wallet** | The creator saves a Stellar wallet they hold the keys to, or an exchange deposit address with its number memo. Paperstall checks on Stellar that it exists and can hold USDC, then sends there in one tap. A guide shows the routes to naira (Busha) and cedis (MoneyGram cash pickup). |
+| **Anchor cash-out, rehearsed** | Sign in to a Stellar anchor with the passkey wallet (SEP-45), fill in its own form (SEP-24), and send it the USDC. On testnet this runs against Stellar's test anchor, so no real bank is paid. |
 
 ## How it uses Stellar
 
@@ -161,15 +162,21 @@ Challenges are single use and expire in 5 minutes. Proven wallets go in a signed
 
 ## Cash-out, honestly
 
-On testnet, cash-out uses the Stellar Development Foundation's test anchor (`testanchor.stellar.org`), which supports SEP-45 sign-in for contract accounts and SEP-24 USDC withdrawals: the USDC really leaves the wallet, the bank payout is simulated, and naira and cedi figures are mid-market estimates ([Exchange Rate API](https://www.exchangerate-api.com)).
+No Stellar service pays naira or cedis for USDC straight from a passkey (contract) wallet yet. We checked the live routes on 15 Nov 2026:
 
-For mainnet we checked the live ramps on 14 Nov 2026:
+- **No naira or cedi anchor accepts contract accounts.** None of them supports SEP-45 sign-in, and they watch for deposits as classic payments with a memo.
+- **LINK** (`ngnc.online`) pays naira to Nigerian banks over SEP-24, but it redeems only its own NGNC token. Swapping USDC for NGNC on the Stellar DEX was quoted about 25% below the market rate for 100 USDC.
+- **Busha** (Nigeria) lists USDC on Stellar for deposits and naira bank withdrawals ([docs](https://docs.busha.io/guides/reference/supported-currencies)). Whether its app sells that USDC for naira still needs checking with a small amount.
+- **MoneyGram** pays cash for USDC on Stellar, and LOBSTR lists Ghana for cash pickup ([LOBSTR](https://lobstr.freshdesk.com/support/solutions/articles/151000001598-what-countries-are-supported-for-cash-in-and-cash-out-by-moneygram-services-on-lobstr-)). That is cash at an agent, not mobile money.
 
-- **LINK** (`ngnc.online`, NGNC) runs SEP-24 naira withdrawals to Nigerian banks, but takes NGNC only and signs in classic accounts only (no SEP-45 yet). Its cedi asset GHSC is listed as pending.
-- **MoneyGram Ramps** takes USDC directly over SEP-24, but needs the wallet's domain allowlisted, and we could not confirm Nigeria or Ghana payout.
-- None of the NGN or GHS ramps we found accepts a contract (passkey) account today.
+So Paperstall pays out to an address the creator owns:
 
-So on mainnet a creator can already send USDC to any Stellar wallet or exchange from the dashboard (muxed addresses carry memo IDs), and the anchor flow switches on by setting the anchor's domain once a naira anchor accepts SEP-45. We are asking LINK and MoneyGram about it.
+- **Their own Stellar wallet** (LOBSTR, Freighter). Before saving, the server checks on Horizon that the account exists and holds Circle's USDC, so a payout can't bounce; the dashboard checks again before each send. From there a creator in Nigeria sends to Busha, and one in Ghana uses MoneyGram inside LOBSTR.
+- **An exchange deposit address with a number memo**, sent as one M-address (CAP-67 lets the USDC contract's `transfer` take a muxed destination). This is marked experimental on the dashboard: no exchange has said yet that it credits USDC sent from a smart wallet this way, so a creator should send $1 first. Text memos are refused, because a passkey wallet can only attach a number.
+
+Paperstall never holds creators' money or converts it, and the payout address is private to the signed-in creator. Nigeria (the CBN rules reported in force since 5 Nov 2026) and Ghana (the VASP Act) both license the step of converting stablecoins to local currency, which is one more reason to leave that step to the creator's own exchange.
+
+The anchor flow is still in the dashboard as a rehearsal: on testnet it signs in to Stellar's test anchor (`testanchor.stellar.org`) with SEP-45 and withdraws over SEP-24. The USDC really leaves the wallet, and the bank payout is simulated. It switches to a real anchor by setting `ANCHOR_DOMAIN` once a naira anchor accepts SEP-45. Naira and cedi figures are mid-market estimates ([Exchange Rate API](https://www.exchangerate-api.com)).
 
 ## The app
 
@@ -203,6 +210,7 @@ Then open http://localhost:5173. The sponsor needs testnet XLM (`stellar keys fu
 3. A second buyer pays from a Stellar wallet: funds it with Friendbot, adds USDC, pays with the fee bumped by the store.
 4. The creator signs in on a second device with the same passkey, sees both sales, pays out the co-creator's held share once they add a trustline, pauses and resumes the product, and names their shop.
 5. The first buyer signs in on another device and downloads from their library.
+6. The creator saves a payout wallet: one that can't hold USDC yet is refused with the reason, then accepted once it adds USDC. They send 1 USDC there, then save the same account as an exchange deposit with a memo and send 0.5 USDC to the M-address.
 
 `APP_URL=https://paperstall.onrender.com pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 15 Nov 2026, after the security fixes, all 27 checks passed against the live site.
 
@@ -213,6 +221,7 @@ It checks:
 - a browser that didn't buy gets no link, and a forged link is refused
 - the Stellar wallet paid no XLM for its purchase
 - the dashboard figures, and the shop page
+- the payout address is private to the creator, and both payouts arrive in the account
 - on chain: creator, affiliate, co-creator and both buyers' balances, both receipts, and no XLM in any passkey wallet
 
 ### Deploy

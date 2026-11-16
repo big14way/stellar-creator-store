@@ -21,6 +21,9 @@ export type ProductRow = Omit<Draft, "id"> & { id: number };
 
 export type Profile = { wallet: string; name: string; bio: string; handle: string | null; updated_at: number };
 
+/** Where a creator's payouts go. Private: never part of the public profile. */
+export type PayoutRow = { wallet: string; address: string; updated_at: number };
+
 export type SaleRow = {
   product_id: number;
   buyer: string;
@@ -55,6 +58,7 @@ async function migrate(sql: Sql) {
     "create index if not exists purchases_by_buyer on purchases (buyer)",
     `create table if not exists profiles (
       wallet text primary key, name text not null, bio text not null, handle text unique, updated_at bigint not null)`,
+    "create table if not exists payouts (wallet text primary key, address text not null, updated_at bigint not null)",
     `create table if not exists blobs (key text primary key, bytes ${blob} not null, size bigint not null)`,
     "create table if not exists rate (key text primary key, start bigint not null, count bigint not null)",
     "create table if not exists nonces (nonce text primary key, expires bigint not null)",
@@ -171,6 +175,15 @@ export async function openDb(sql: Sql) {
          updated_at = excluded.updated_at`,
         [p.wallet, p.name, p.bio, p.handle, p.updated_at],
       ),
+
+    payout: (wallet: string) => sql.get<PayoutRow>("select * from payouts where wallet = ?", [wallet]),
+    savePayout: (p: PayoutRow) =>
+      sql.run(
+        `insert into payouts (wallet, address, updated_at) values (?, ?, ?)
+         on conflict (wallet) do update set address = excluded.address, updated_at = excluded.updated_at`,
+        [p.wallet, p.address, p.updated_at],
+      ),
+    deletePayout: (wallet: string) => sql.run("delete from payouts where wallet = ?", [wallet]),
 
     /**
      * Counts a hit in a fixed window and says whether it is within the limit.

@@ -82,6 +82,18 @@ it("shop handles are unique", async () => {
   await db.sql.close();
 });
 
+it("a payout address is private to its wallet, replaced on change and removable", async () => {
+  const db = await fresh();
+  assert.equal(await db.payout(W(1)), undefined);
+  await db.savePayout({ wallet: W(1), address: "GFIRST", updated_at: 1 });
+  await db.savePayout({ wallet: W(1), address: "MSECOND", updated_at: 2 });
+  assert.equal((await db.payout(W(1)))?.address, "MSECOND");
+  assert.equal(await db.payout(W(2)), undefined);
+  await db.deletePayout(W(1));
+  assert.equal(await db.payout(W(1)), undefined);
+  await db.sql.close();
+});
+
 it("publishing a draft and recording a purchase", async () => {
   const db = await fresh();
   const files = sqlFiles(db.sql);
