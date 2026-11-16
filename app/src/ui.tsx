@@ -67,9 +67,22 @@ export function TagButton({ children, icon, variant = "solid", className, ...res
   );
 }
 
-export function TagLink({ href, children, icon, variant = "solid" }: { href: string; children: ReactNode; icon: ReactNode; variant?: Variant }) {
+export function TagLink({
+  href,
+  children,
+  icon,
+  variant = "solid",
+  ptName,
+}: {
+  href: string;
+  children: ReactNode;
+  icon: ReactNode;
+  variant?: Variant;
+  /** What the page-change tag calls the destination, when the label does not say it. */
+  ptName?: string;
+}) {
   return (
-    <Link href={href} className={`tag ${variant}`}>
+    <Link href={href} className={`tag ${variant}`} data-pt-name={ptName}>
       <TagInside icon={icon}>{children}</TagInside>
     </Link>
   );

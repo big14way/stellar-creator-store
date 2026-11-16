@@ -284,7 +284,7 @@ function Window({ featured, more }: { featured: Product; more: Product[] }) {
               <div className="window-price">{usd(featured.price)}</div>
               <span className="mono muted-ink">{featured.sales} sold · paid in USDC</span>
             </div>
-            <TagLink href={`/p/${featured.id}`} icon={<ArrowRight size={16} />}>
+            <TagLink href={`/p/${featured.id}`} icon={<ArrowRight size={16} />} ptName={featured.title}>
               View product
             </TagLink>
           </div>

@@ -1,6 +1,8 @@
 import { BadgeDollarSign } from "lucide-react";
-import { Component, useEffect, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
+import { api } from "./api";
+import { KINDS } from "./kinds";
 import { All } from "./pages/All";
 import { Dashboard } from "./pages/Dashboard";
 import { Home } from "./pages/Home";
@@ -9,16 +11,82 @@ import { ProductPage } from "./pages/Product";
 import { Sell } from "./pages/Sell";
 import { Shop } from "./pages/Shop";
 import { EXPLORER, STORE_ID } from "./config";
-import { Logo } from "./ui";
+import { PageTransition } from "./transition";
+import { Logo, TagAnchor } from "./ui";
 import { explain } from "./wallet";
 import { short, useWallet, WalletProvider } from "./useWallet";
 
 const REPO = "https://github.com/big14way/stellar-creator-store";
 
+const PAGES = [
+  ["/shop", "Shop"],
+  ["/sell", "Sell"],
+  ["/library", "Library"],
+  ["/dashboard", "Dashboard"],
+] as const;
+
+/** The phone menu: the pages as big rows, the aisles with their counts, then the free USDC tag. */
+function MenuSheet({ open, close, here }: { open: boolean; close: () => void; here: (path: string) => string | undefined }) {
+  const [kinds, setKinds] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    if (open && !kinds) api.stats().then((s) => setKinds(s.kinds), () => undefined);
+  }, [open, kinds]);
+  const count = (n: number) => `${n} ${n === 1 ? "product" : "products"}`;
+  return (
+    <div
+      className={`menu-sheet ${open ? "is-open" : ""}`}
+      id="site-menu"
+      inert={!open}
+      // Same-page links (an aisle filter, an anchor) do not change the route, so close on any link.
+      onClick={(e) => e.target instanceof Element && e.target.closest("a") && close()}
+    >
+      <div className="menu-in">
+        <nav className="menu-links" aria-label="Pages">
+          {PAGES.map(([path, label], i) => (
+            <Link key={path} href={path} className={here(path)} style={{ "--i": i } as CSSProperties}>
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <p className="menu-ct">Aisles</p>
+        <ul className="menu-aisles">
+          {KINDS.map((k) => (
+            <li key={k.id}>
+              <Link href={`/shop?aisle=${k.id}`}>
+                <span>{k.label}</span>
+                <small>{kinds ? count(kinds[k.id] ?? 0) : "·"}</small>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <div className="menu-foot">
+          <TagAnchor href="/#free" icon={<BadgeDollarSign size={16} />} data-pt-name="free usdc">
+            Free test USDC
+          </TagAnchor>
+          <span className="menu-soc">
+            <a href={REPO} target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+            <a href={`${EXPLORER}/contract/${STORE_ID}`} target="_blank" rel="noreferrer">
+              Contract
+            </a>
+            <a href={`${REPO}#how-it-uses-stellar`} target="_blank" rel="noreferrer">
+              How it works
+            </a>
+          </span>
+          <span className="menu-note">Stellar testnet · Circle test USDC</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Header() {
   const { wallet, stellar, restoring, signIn } = useWallet();
   const [signInError, setSignInError] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  const [open, setOpen] = useState(false);
+  const toggle = useRef<HTMLButtonElement>(null);
   const [location] = useLocation();
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 24);
@@ -26,10 +94,32 @@ function Header() {
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
+  useEffect(() => setOpen(false), [location]);
+  useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    root.classList.add("menu-open");
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      toggle.current?.focus();
+    };
+    // The menu exists only at phone width; widening the window closes it.
+    const wide = window.matchMedia("(min-width: 961px)");
+    const onWide = () => wide.matches && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    wide.addEventListener("change", onWide);
+    return () => {
+      root.classList.remove("menu-open");
+      window.removeEventListener("keydown", onKey);
+      wide.removeEventListener("change", onWide);
+    };
+  }, [open]);
   const shown = wallet ?? stellar;
   const here = (path: string) => (location === path || location.startsWith(`${path}/`) ? "is-here" : undefined);
   return (
-    <header className={`site-header ${scrolled ? "is-scrolled" : ""}`}>
+    <>
+    <header className={`site-header ${scrolled ? "is-scrolled" : ""} ${open ? "menu-open" : ""}`}>
       <div className="container">
         <Link href="/" className="brand">
           <Logo />
@@ -75,9 +165,24 @@ function Header() {
               {signInError}
             </span>
           )}
+          <button
+            ref={toggle}
+            type="button"
+            className="menu-btn"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            aria-controls="site-menu"
+            onClick={() => setOpen((o) => !o)}
+            data-testid="menu"
+          >
+            <i />
+            <i />
+          </button>
         </nav>
       </div>
     </header>
+    <MenuSheet open={open} close={() => setOpen(false)} here={here} />
+    </>
   );
 }
 
@@ -191,6 +296,7 @@ export function App() {
   return (
     <WalletProvider>
       <ScrollToTop />
+      <PageTransition />
       <Header />
       <main>
         <Pages>
