@@ -449,9 +449,11 @@ app.get("/api/sales", async (c) => {
   const creator = c.req.query("creator");
   const own = isWallet(creator);
   const rows = await db.recentSales(50, own ? creator : undefined);
-  // The public feed leaves out listings the operator hid; a creator's own list keeps everything.
+  // The public feed shows sales of products on the shelf (not paused, not hidden by the operator);
+  // a creator's own list keeps everything.
+  const shelf = own ? null : new Set((await withChain(await db.latest(48))).filter(onShelf).map((p) => p.id));
   return c.json(
-    (own ? rows : rows.filter((s) => !HIDDEN.has(s.product_id)).slice(0, 12)).map((s) => ({
+    (shelf ? rows.filter((s) => shelf.has(s.product_id)).slice(0, 12) : rows).map((s) => ({
       productId: s.product_id,
       title: s.title,
       price: s.price,

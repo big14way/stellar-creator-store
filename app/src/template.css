@@ -2947,3 +2947,14 @@ h1.display,
 .note-art.photo-cash {
   --photo: url("/photos/note-cash.webp");
 }
+
+/* a single box on a plank sits off-centre, alternating, like a hand-arranged shelf */
+.plank-row:nth-child(1) .plank-objects:has(> .shelf-obj:only-child) {
+  justify-content: flex-start;
+  padding-left: 16%;
+}
+
+.plank-row:nth-child(2) .plank-objects:has(> .shelf-obj:only-child) {
+  justify-content: flex-end;
+  padding-right: 18%;
+}

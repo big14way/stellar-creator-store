@@ -73,8 +73,9 @@ export function Home() {
 /* ---------------- 1. hero: headline, tags, recent-sales receipt; three shelves of real products ---------------- */
 
 function Hero({ products, sales, stats }: { products: Product[]; sales: Sale[]; stats: Stats | null }) {
+  // Three planks, as in a real shop: products go along them in turn, so a small shelf still fills the wall.
   const onShelf = products.slice(0, 9);
-  const planks = [onShelf.slice(0, 3), onShelf.slice(3, 6), onShelf.slice(6, 9)].filter((p) => p.length > 0);
+  const planks = onShelf.length === 0 ? [] : [0, 1, 2].map((p) => onShelf.filter((_, i) => i % 3 === p));
   return (
     <section className="band dark lined hero">
       <div className="container hero-grid">
