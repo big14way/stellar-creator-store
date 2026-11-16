@@ -397,19 +397,16 @@ h1.display,
   width: 16px;
   height: 2px;
   background: var(--cream);
-  transition:
-    transform 0.35s ease,
-    translate 0.35s ease;
+  transition: transform 0.35s ease;
 }
 
+/* One transform each: the minifier drops a translate that shares a rule with a transform. */
 .menu-open .menu-btn i:first-child {
-  translate: 0 3px;
-  transform: rotate(45deg);
+  transform: translateY(3px) rotate(45deg);
 }
 
 .menu-open .menu-btn i:last-child {
-  translate: 0 -3px;
-  transform: rotate(-45deg);
+  transform: translateY(-3px) rotate(-45deg);
 }
 
 .site-header.menu-open {
