@@ -16,6 +16,6 @@ Not in git: `clips/` (recordings), `creds/` (the test passkey wallets used on ca
 
 Needs ffmpeg, Python 3 with Pillow and edge-tts, and Node with Playwright (`npm i playwright` here, or set `PLAYWRIGHT_PATH`).
 
-1. Record: `node record.js scenes.json` writes one clip per scene to `clips/`. The sell, buy and creator scenes sign in with the passkeys in `creds/creator.json` and `creds/buyer.json`; the first run creates them.
+1. Record: `node record.js scenes.json` writes one clip per scene to `clips/`. The sell and creator scenes sign in as the demo shop, loading its passkey from `creds/creator.json` (the `credentials` of `app/.data-seed/creator.json`, written by `pnpm seed:demo`). The buy scene makes a new passkey wallet and saves it to `creds/buyer.json`.
 2. Build: run the pitch video build script on `demo.json`. It writes `out/paperstall-pitch.mp4`, caching narration in `.build/`.
 3. Check the length, a contact sheet of frames, and the loudness (`ffmpeg -i out/paperstall-pitch.mp4 -af volumedetect -f null -`: mean about -17 dB, peak at or below -1.5 dB).
