@@ -1,0 +1,176 @@
+[
+ {
+  "t": 0.5,
+  "html": "<span class=\"p\">➜</span> <span class=\"dim\">stellar-creator-store/app</span> APP_URL=https://paperstall.onrender.com pnpm test:e2e",
+  "type": true,
+  "cps": 45
+ },
+ {
+  "t": 2.577777777777778,
+  "html": "<span class=\"dim\">→ setup</span>"
+ },
+ {
+  "t": 3.077777777777778,
+  "html": "<span class=\"dim\">→ creator lists a product</span>"
+ },
+ {
+  "t": 3.577777777777778,
+  "html": "  <span class=\"ok\">✓</span> product page shows $3.00"
+ },
+ {
+  "t": 3.8177777777777777,
+  "html": "<span class=\"dim\">→ buyer 1: passkey wallet, through an affiliate link</span>"
+ },
+ {
+  "t": 4.317777777777778,
+  "html": "  <span class=\"ok\">✓</span> buyer downloads exactly the file the creator uploaded"
+ },
+ {
+  "t": 4.557777777777778,
+  "html": "  <span class=\"ok\">✓</span> download keeps the original file name"
+ },
+ {
+  "t": 4.797777777777778,
+  "html": "  <span class=\"ok\">✓</span> the saved link works on another device"
+ },
+ {
+  "t": 5.037777777777778,
+  "html": "  <span class=\"ok\">✓</span> another browser can't get a link without buying"
+ },
+ {
+  "t": 5.277777777777779,
+  "html": "  <span class=\"ok\">✓</span> a forged link is refused"
+ },
+ {
+  "t": 5.517777777777779,
+  "html": "<span class=\"dim\">→ buyer 2: a Stellar wallet (G account), fee paid by the store</span>"
+ },
+ {
+  "t": 6.017777777777779,
+  "html": "  <span class=\"ok\">✓</span> the Stellar wallet buyer downloads the same file"
+ },
+ {
+  "t": 6.257777777777779,
+  "html": "  <span class=\"ok\">✓</span> the Stellar wallet paid no XLM for the purchase: the store fee-bumped it"
+ },
+ {
+  "t": 6.497777777777779,
+  "html": "<span class=\"dim\">→ creator on a second device</span>"
+ },
+ {
+  "t": 6.997777777777779,
+  "html": "  <span class=\"ok\">✓</span> the passkey signs in to the same wallet on a new device"
+ },
+ {
+  "t": 7.237777777777779,
+  "html": "  <span class=\"ok\">✓</span> dashboard shows the creator's $4.20 from two sales"
+ },
+ {
+  "t": 7.47777777777778,
+  "html": "  <span class=\"ok\">✓</span> dashboard shows 2 sales"
+ },
+ {
+  "t": 7.71777777777778,
+  "html": "  <span class=\"ok\">✓</span> both sales are listed with their transactions"
+ },
+ {
+  "t": 7.95777777777778,
+  "html": "  <span class=\"ok\">✓</span> dashboard shows $1.20 held for the co-creator"
+ },
+ {
+  "t": 8.19777777777778,
+  "html": "  <span class=\"ok\">✓</span> co-creator received both 20% shares, 1.20 USDC"
+ },
+ {
+  "t": 8.43777777777778,
+  "html": "  <span class=\"ok\">✓</span> the creator paused sales on chain"
+ },
+ {
+  "t": 8.67777777777778,
+  "html": "  <span class=\"ok\">✓</span> a paused product leaves the public shelf"
+ },
+ {
+  "t": 8.917777777777781,
+  "html": "  <span class=\"ok\">✓</span> the shop page shows the creator's name"
+ },
+ {
+  "t": 9.157777777777781,
+  "html": "  <span class=\"ok\">✓</span> the shop page lists the product"
+ },
+ {
+  "t": 9.397777777777781,
+  "html": "<span class=\"dim\">→ buyer 1's library on another device</span>"
+ },
+ {
+  "t": 9.897777777777781,
+  "html": "  <span class=\"ok\">✓</span> the library downloads the file on a new device"
+ },
+ {
+  "t": 10.137777777777782,
+  "html": "<span class=\"dim\">→ creator pays out to a wallet they own</span>"
+ },
+ {
+  "t": 10.637777777777782,
+  "html": "  <span class=\"ok\">✓</span> a payout account that can't hold USDC is refused, with the reason"
+ },
+ {
+  "t": 10.877777777777782,
+  "html": "  <span class=\"ok\">✓</span> the creator saves their own Stellar wallet for payouts"
+ },
+ {
+  "t": 11.117777777777782,
+  "html": "  <span class=\"ok\">✓</span> nobody else can read the payout address"
+ },
+ {
+  "t": 11.357777777777782,
+  "html": "  <span class=\"ok\">✓</span> 1 USDC reached the payout wallet"
+ },
+ {
+  "t": 11.597777777777782,
+  "html": "  <span class=\"ok\">✓</span> an exchange deposit is saved with its memo"
+ },
+ {
+  "t": 11.837777777777783,
+  "html": "  <span class=\"ok\">✓</span> 0.5 USDC sent to the M-address reached the account under it"
+ },
+ {
+  "t": 12.077777777777783,
+  "html": "<span class=\"dim\">→ on chain</span>"
+ },
+ {
+  "t": 12.577777777777783,
+  "html": "  <span class=\"ok\">✓</span> receipt recorded for the passkey buyer"
+ },
+ {
+  "t": 12.817777777777783,
+  "html": "  <span class=\"ok\">✓</span> receipt recorded for the Stellar wallet buyer"
+ },
+ {
+  "t": 13.057777777777783,
+  "html": "  <span class=\"ok\">✓</span> creator holds 4.20 USDC less the 1.50 paid out"
+ },
+ {
+  "t": 13.297777777777783,
+  "html": "  <span class=\"ok\">✓</span> affiliate received 0.30 USDC, only for the referred sale"
+ },
+ {
+  "t": 13.537777777777784,
+  "html": "  <span class=\"ok\">✓</span> passkey buyer has 7 of the 10 test USDC left"
+ },
+ {
+  "t": 13.777777777777784,
+  "html": "  <span class=\"ok\">✓</span> Stellar wallet buyer has 7 of the 10 test USDC left"
+ },
+ {
+  "t": 14.017777777777784,
+  "html": "  <span class=\"ok\">✓</span> nothing is left held in the contract"
+ },
+ {
+  "t": 14.257777777777784,
+  "html": "  <span class=\"ok\">✓</span> neither passkey wallet holds XLM: every fee was sponsored"
+ },
+ {
+  "t": 14.497777777777785,
+  "html": "<span class=\"ok\">all 33 checks passed</span>"
+ }
+]

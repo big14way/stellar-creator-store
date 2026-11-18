@@ -1,0 +1,650 @@
+{
+ "clips_dir": "clips",
+ "work_dir": ".build",
+ "output": "out/paperstall-pitch.mp4",
+ "voice": "en-US-AndrewMultilingualNeural",
+ "voice_rate": "+14%",
+ "crossfade": 0.6,
+ "sfx_gain": 0.6,
+ "brand": {
+  "name": "Paperstall",
+  "domain": "paperstall.onrender.com",
+  "paper": "#1f1512",
+  "paper_deep": "#2b1c17",
+  "ink": "#f3ebdd",
+  "ink_soft": "#cfc5b6",
+  "ink_faint": "#8a7e70",
+  "accent": "#ff6a2b",
+  "accent_soft": "#ffb08c",
+  "card": "#3a1f14"
+ },
+ "scenes": [
+  {
+   "id": "s0",
+   "kind": "title",
+   "image": "../../app/public/photos/cover-studio.webp",
+   "tagline": "Sell what you make to buyers anywhere. Get paid in dollars the moment they buy.",
+   "tag": "Stellar Buildathon · Builder's Circle · Nigeria and Ghana",
+   "vo": "This is Paperstall: a creator store for Nigeria and Ghana. Sell what you make to buyers anywhere, and get paid in dollars on Stellar the moment they buy."
+  },
+  {
+   "id": "p1",
+   "kind": "slide",
+   "image": "../../app/public/photos/arch-desk.webp",
+   "label": "The problem",
+   "head": "Ada sells drum kits to producers abroad.\nGetting paid is the hard part.",
+   "bullets": [
+    {
+     "k": "Slow",
+     "v": "Payouts wait for processing and stall at weekends."
+    },
+    {
+     "k": "Lossy",
+     "v": "Sales to buyers abroad lose value when converted to naira."
+    },
+    {
+     "k": "Manual",
+     "v": "Her co-producer's share is a bank transfer she sends by hand."
+    }
+   ],
+   "voice_rate": "+8%",
+   "vo": "Meet Ada, a beat-maker in Lagos. She sells drum kits to producers abroad. Selling is easy. Getting paid is not: payouts wait for processing and stall at weekends, foreign sales lose value when they turn into naira, and her co-producer's share is a transfer she sends by hand."
+  },
+  {
+   "id": "p2",
+   "kind": "slide",
+   "image": "../../app/public/photos/note-phone.webp",
+   "label": "The market and the gap",
+   "head": "Creators already earn here.\nThe payment rails are missing.",
+   "bullets": [
+    {
+     "k": "NGN 18 billion",
+     "v": "paid out by Selar to its creators in 2025 (Intelpoint)."
+    },
+    {
+     "k": "Solved",
+     "v": "Listing and selling digital products."
+    },
+    {
+     "k": "Not solved",
+     "v": "Instant dollar settlement, buyers anywhere, splits that pay themselves."
+    },
+    {
+     "k": "Why now",
+     "v": "Circle's USDC on Stellar, passkey smart wallets, fee sponsorship."
+    }
+   ],
+   "vo": "The demand is proven: Selar paid its creators eighteen billion naira in 2025. Listing and selling are solved. Settlement is not: instant dollars, buyers anywhere, splits that pay themselves. Stellar now has all three pieces: Circle's dollar, passkey smart wallets, and fees a store can pay for its users."
+  },
+  {
+   "id": "p3",
+   "kind": "slide",
+   "label": "What changes",
+   "head": "One payment pays everyone,\nin the same transaction.",
+   "diagram": {
+    "boxes": [
+     {
+      "id": "buyer",
+      "box": [
+       205,
+       30,
+       505,
+       124
+      ],
+      "title": "Buyer",
+      "sub": "pays in USDC with a passkey"
+     },
+     {
+      "id": "store",
+      "box": [
+       120,
+       236,
+       590,
+       336
+      ],
+      "title": "Store contract",
+      "sub": "Soroban: splits every sale at once",
+      "accent": true
+     },
+     {
+      "id": "creator",
+      "box": [
+       20,
+       470,
+       180,
+       570
+      ],
+      "title": "Creator",
+      "sub": "the rest"
+     },
+     {
+      "id": "co",
+      "box": [
+       190,
+       470,
+       350,
+       570
+      ],
+      "title": "Co-creators",
+      "sub": "up to five"
+     },
+     {
+      "id": "aff",
+      "box": [
+       360,
+       470,
+       520,
+       570
+      ],
+      "title": "Affiliate",
+      "sub": "who sent the buyer"
+     },
+     {
+      "id": "fee",
+      "box": [
+       530,
+       470,
+       690,
+       570
+      ],
+      "title": "Store fee",
+      "sub": "5%, capped at 10%"
+     }
+    ],
+    "arrows": [
+     {
+      "from": "buyer",
+      "from_side": "bottom",
+      "to": "store",
+      "to_side": "top",
+      "label": "one payment",
+      "label_at": [
+       372,
+       180
+      ],
+      "anchor": "lm"
+     },
+     {
+      "from": "store",
+      "from_side": "bottom",
+      "from_dx": -170,
+      "to": "creator",
+      "to_side": "top"
+     },
+     {
+      "from": "store",
+      "from_side": "bottom",
+      "from_dx": -60,
+      "to": "co",
+      "to_side": "top"
+     },
+     {
+      "from": "store",
+      "from_side": "bottom",
+      "from_dx": 60,
+      "to": "aff",
+      "to_side": "top"
+     },
+     {
+      "from": "store",
+      "from_side": "bottom",
+      "from_dx": 170,
+      "to": "fee",
+      "to_side": "top"
+     }
+    ],
+    "note": "The receipt on chain unlocks the download. Nobody holds anyone's money."
+   },
+   "vo": "One payment does it all. The buyer pays in USDC. A Soroban contract splits it in the same transaction: the creator, up to five co-creators, the affiliate who sent the buyer, and the store's five percent. The receipt on chain unlocks the download.",
+   "bullets": [
+    {
+     "k": "One payment",
+     "v": "The buyer pays in USDC with a passkey or any Stellar wallet."
+    },
+    {
+     "k": "Split on chain",
+     "v": "The contract pays the creator, co-creators, affiliate and the 5% fee at once."
+    },
+    {
+     "k": "Receipt unlocks",
+     "v": "The sale on chain is the receipt the server checks before serving the file."
+    }
+   ]
+  },
+  {
+   "id": "d1",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "home.webm",
+   "cut": [
+    9.0,
+    31.0
+   ],
+   "crop": [
+    1440,
+    810,
+    0,
+    0
+   ],
+   "max_speed": 2.0,
+   "step": "01",
+   "head": "Live on Stellar testnet",
+   "sub": "A shelf of real products, each one listed by a creator with a passkey.",
+   "vo": "This is Paperstall, live on Stellar testnet. Six aisles, from templates and ebooks to beats and design assets. Every product on the shelf was listed by a creator with a passkey."
+  },
+  {
+   "id": "d2",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "sell.webm",
+   "cut": [
+    [
+     5.5,
+     37.0
+    ],
+    [
+     63.0,
+     68.8
+    ]
+   ],
+   "crop": [
+    1440,
+    810,
+    0,
+    0
+   ],
+   "max_speed": 2.8,
+   "step": "02",
+   "head": "List a product with a fingerprint",
+   "sub": "No seed phrase, no app, no XLM. The co-designer's 20% is fixed at listing.",
+   "vo": "A creator signs in with a fingerprint: no seed phrase, no app, no XLM. They upload the file, set a price in dollars, give a co-designer twenty percent, and sign. The store pays the network fee."
+  },
+  {
+   "id": "d3",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "buy.webm",
+   "cut": [
+    5.0,
+    20.0
+   ],
+   "crop": [
+    1440,
+    810,
+    0,
+    0
+   ],
+   "max_speed": 2.0,
+   "step": "03",
+   "head": "See where the money goes before you pay",
+   "sub": "The split on the page is read from the contract.",
+   "vo": "Every product page shows where the buyer's four dollars go before anyone pays, read from the contract itself."
+  },
+  {
+   "id": "d4",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "buy.webm",
+   "cut": [
+    [
+     20.5,
+     44.0
+    ],
+    [
+     68.0,
+     75.2
+    ]
+   ],
+   "crop": [
+    1440,
+    810,
+    0,
+    0
+   ],
+   "max_speed": 2.4,
+   "step": "04",
+   "head": "Pay with a passkey, download at once",
+   "sub": "A new wallet, ten test dollars from the faucet, one tap. The receipt is on chain.",
+   "vo": "A buyer abroad pays the same way. A fingerprint makes a wallet, the faucet adds ten test dollars, and one tap pays. The receipt lands on chain and the download unlocks."
+  },
+  {
+   "id": "d5",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "explorer.webm",
+   "cut": [
+    9.0,
+    21.0
+   ],
+   "crop": [
+    1440,
+    810,
+    0,
+    0
+   ],
+   "max_speed": 1.2,
+   "step": "05",
+   "head": "The sale on Stellar's explorer",
+   "sub": "One buy call on the store contract: 4 USDC for product 30. The 0.04 XLM fee came from the store's sponsor.",
+   "vo": "Here is that sale on Stellar's explorer: one call to the store contract, four dollars for product thirty. The network fee came from the store's sponsor account, not the buyer."
+  },
+  {
+   "id": "d6",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "creator.webm",
+   "cut": [
+    10.0,
+    32.0
+   ],
+   "crop": [
+    1440,
+    810,
+    0,
+    0
+   ],
+   "max_speed": 2.4,
+   "step": "06",
+   "head": "Sales land in the creator's wallet",
+   "sub": "Every sale with its transaction, and the balance in naira and cedis.",
+   "vo": "The creator sees each sale arrive with its transaction, and the balance in naira and cedis at today's rate. No payout to request: the money is already in their wallet."
+  },
+  {
+   "id": "d7",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "creator.webm",
+   "cut": [
+    32.0,
+    67.2
+   ],
+   "crop": [
+    1440,
+    810,
+    0,
+    0
+   ],
+   "max_speed": 2.4,
+   "step": "07",
+   "head": "Cash out through a wallet you own",
+   "sub": "Checked on Stellar before saving: the account exists and holds USDC. Then one tap.",
+   "vo": "Cash-out stays honest. No Stellar anchor pays naira to a passkey wallet yet, so the creator saves a wallet they own. Paperstall checks it can hold USDC, then sends in one tap. From there, Busha pays naira and MoneyGram pays cedis."
+  },
+  {
+   "id": "d8",
+   "kind": "laptop",
+   "layout": "wide",
+   "src": "term_e2e.webm",
+   "cut": [
+    0.2,
+    18.4
+   ],
+   "crop": [
+    1760,
+    960,
+    80,
+    60
+   ],
+   "max_speed": 2.2,
+   "step": "08",
+   "head": "Tested on the live site",
+   "sub": "33 checks with real testnet transactions. The run on 16 Nov 2026 passed all 33.",
+   "vo": "Every claim here is tested on the live site: thirty-three checks with real testnet transactions, from the fingerprint sign-up to the payout. The latest run passed all of them, and no passkey wallet ever held XLM."
+  },
+  {
+   "id": "p4",
+   "kind": "slide",
+   "image": "../../app/public/photos/note-receipt.webp",
+   "label": "Why Stellar",
+   "columns": 2,
+   "head": "Dollars, speed and wallets\nanyone can use, on one network.",
+   "bullets": [
+    {
+     "k": "Circle USDC",
+     "v": "issued natively on Stellar"
+    },
+    {
+     "k": "5-second ledgers",
+     "v": "a sale settles before the page reloads"
+    },
+    {
+     "k": "Under 0.05 XLM",
+     "v": "network fee for a sale, paid by the store"
+    },
+    {
+     "k": "Passkeys on chain",
+     "v": "the wallet contract checks WebAuthn signatures"
+    }
+   ],
+   "vo": "Why Stellar? Circle issues USDC here natively. Ledgers close every five seconds. A sale costs the store under five hundredths of an XLM in fees. And Soroban contract wallets check passkey signatures on chain, so buyers need no crypto at all."
+  },
+  {
+   "id": "p5",
+   "kind": "slide",
+   "image": "../../app/public/photos/steps-night-desk.webp",
+   "label": "Built on",
+   "columns": 2,
+   "head": "Every piece is load-bearing.",
+   "bullets": [
+    {
+     "k": "Soroban contract",
+     "v": "lists, splits, records receipts"
+    },
+    {
+     "k": "Circle USDC",
+     "v": "through its asset contract"
+    },
+    {
+     "k": "OpenZeppelin smart accounts",
+     "v": "passkey wallets, smart-account-kit"
+    },
+    {
+     "k": "Stellar Wallets Kit",
+     "v": "Freighter, LOBSTR, xBull, Albedo"
+    },
+    {
+     "k": "Fee sponsorship",
+     "v": "relayed calls and fee bumps"
+    },
+    {
+     "k": "SEP-45, SEP-24, CAP-67",
+     "v": "anchor sign-in, withdrawal, memo IDs"
+    }
+   ],
+   "vo": "It is built on a Soroban contract, Circle's USDC, OpenZeppelin smart accounts, Stellar Wallets Kit, fee sponsorship, and the anchor standards for sign-in, withdrawal and exchange memos. Every piece is load-bearing."
+  },
+  {
+   "id": "p6",
+   "kind": "slide",
+   "image": "../../app/public/photos/note-cash.webp",
+   "label": "Revenue and traction",
+   "head": "A cut of each sale,\ntaken by the contract.",
+   "bullets": [
+    {
+     "k": "Revenue",
+     "v": "5% of every sale on testnet, capped at 10% by the contract, paid in the same transaction."
+    },
+    {
+     "k": "Growth",
+     "v": "Affiliates earn a share of the sales they bring, so a creator's audience sells for them."
+    },
+    {
+     "k": "Traction",
+     "v": "Live store and demo shop on testnet, 33 of 33 live checks, open source under MIT."
+    }
+   ],
+   "vo": "The business is a cut of each sale, taken by the contract at checkout: five percent today, capped at ten. Affiliates earn a share of the sales they bring. Traction so far: a live store on testnet, a demo shop, thirty-three of thirty-three live checks, and every line open source."
+  },
+  {
+   "id": "p7",
+   "kind": "slide",
+   "label": "Fit and ecosystem",
+   "head": "Three of the buildathon's focus areas,\nin one product.",
+   "diagram": {
+    "boxes": [
+     {
+      "id": "t1",
+      "box": [
+       20,
+       36,
+       240,
+       136
+      ],
+      "title": "Stablecoins",
+      "sub": "USDC payments"
+     },
+     {
+      "id": "t2",
+      "box": [
+       245,
+       36,
+       465,
+       136
+      ],
+      "title": "Smart wallets",
+      "sub": "passkeys"
+     },
+     {
+      "id": "t3",
+      "box": [
+       470,
+       36,
+       690,
+       136
+      ],
+      "title": "Soroban",
+      "sub": "the split contract"
+     },
+     {
+      "id": "p",
+      "box": [
+       150,
+       260,
+       560,
+       360
+      ],
+      "title": "Paperstall on Stellar",
+      "sub": "a store anyone can pay into",
+      "accent": true
+     },
+     {
+      "id": "o1",
+      "box": [
+       20,
+       520,
+       240,
+       620
+      ],
+      "title": "New users",
+      "sub": "no crypto needed"
+     },
+     {
+      "id": "o2",
+      "box": [
+       245,
+       520,
+       465,
+       620
+      ],
+      "title": "USDC volume",
+      "sub": "every sale on chain"
+     },
+     {
+      "id": "o3",
+      "box": [
+       470,
+       520,
+       690,
+       620
+      ],
+      "title": "Anchor demand",
+      "sub": "creators want naira"
+     }
+    ],
+    "arrows": [
+     {
+      "from": "t1",
+      "from_side": "bottom",
+      "to": [
+       250,
+       260
+      ],
+      "soft": true
+     },
+     {
+      "from": "t2",
+      "from_side": "bottom",
+      "to": "p",
+      "to_side": "top",
+      "soft": true
+     },
+     {
+      "from": "t3",
+      "from_side": "bottom",
+      "to": [
+       460,
+       260
+      ],
+      "soft": true
+     },
+     {
+      "from": "p",
+      "from_side": "bottom",
+      "to": "o1",
+      "to_side": "top"
+     },
+     {
+      "from": "p",
+      "from_side": "bottom",
+      "to": "o2",
+      "to_side": "top"
+     },
+     {
+      "from": "p",
+      "from_side": "bottom",
+      "to": "o3",
+      "to_side": "top"
+     }
+    ],
+    "note": "Every sale brings a buyer and a creator into USDC on Stellar."
+   },
+   "vo": "Paperstall uses three of the buildathon's focus areas at once: stablecoin payments, passkey smart wallets, and Soroban contracts. For Stellar, it brings buyers and creators who have never held crypto into USDC, and a queue of creators ready for the first naira anchor that accepts smart wallets.",
+   "bullets": [
+    {
+     "k": "Focus areas",
+     "v": "Stablecoin payments, passkey smart wallets and Soroban contracts."
+    },
+    {
+     "k": "For Stellar",
+     "v": "New users in USDC, every sale on chain, and demand for a naira anchor."
+    }
+   ]
+  },
+  {
+   "id": "s99",
+   "kind": "end",
+   "image": "../../app/public/photos/cover-notebook.webp",
+   "lines": [
+    "Sell what you make.",
+    "Get paid in dollars.",
+    "On Stellar."
+   ],
+   "links": [
+    [
+     "Live demo",
+     "paperstall.onrender.com"
+    ],
+    [
+     "Code",
+     "github.com/big14way/stellar-creator-store"
+    ],
+    [
+     "Proof",
+     "33 of 33 checks on the live site"
+    ]
+   ],
+   "footer": "Stellar testnet · Circle USDC · Soroban · passkey smart wallets",
+   "vo": "Paperstall. Sell what you make, get paid in dollars, on Stellar. Try it at paperstall dot onrender dot com."
+  }
+ ]
+}

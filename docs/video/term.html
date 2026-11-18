@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>terminal</title>
+<style>
+  html, body { margin: 0; background: #06090c; height: 100%; }
+  body { display: grid; place-items: center; font-family: "SF Mono", Menlo, "JetBrains Mono", monospace; }
+  .win { width: 1760px; height: 960px; background: #0a0e13; border: 1px solid #1b232c; border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden; display: flex; flex-direction: column; }
+  .bar { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 18px; background: #0f141b; border-bottom: 1px solid #1b232c; color: #6b7785; font-size: 15px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .t { margin-left: 14px; }
+  pre { flex: 1; margin: 0; padding: 26px 30px; font-size: 22px; line-height: 1.55; color: #d7e0e8; white-space: pre-wrap; word-break: break-word; overflow: hidden; }
+  .p { color: #7ee2b8; } .ok { color: #7ee2b8; } .bad { color: #ff6b6b; } .dim { color: #6b7785; } .link { color: #5cc8ff; }
+  .kw { color: #5cc8ff; } .str { color: #ffcc66; } .cm { color: #6b7785; } .fn { color: #7ee2b8; }
+  .agent { color: #e8d5ff; } .tool { color: #9fb3c8; }
+  .cur { display: inline-block; width: 12px; height: 24px; background: #7ee2b8; vertical-align: -4px; animation: b 1s steps(2) infinite; }
+  @keyframes b { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span class="t" id="title">terminal</span></div>
+  <pre id="out"></pre>
+</div>
+<script>
+  // window.play(schedule): [{t: seconds, html: "...", type?: true}] appends lines at t; `type` types the text char by char.
+  const out = document.getElementById('out');
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  window.setTitle = (t) => { document.getElementById('title').textContent = t; };
+  window.play = async (schedule) => {
+    const t0 = performance.now();
+    for (const item of schedule) {
+      const wait = item.t * 1000 - (performance.now() - t0);
+      if (wait > 0) await sleep(wait);
+      if (item.type) {
+        const span = document.createElement('span'); span.innerHTML = item.html; const text = span.textContent; span.textContent = '';
+        out.appendChild(span);
+        const cur = document.createElement('span'); cur.className = 'cur'; out.appendChild(cur);
+        for (const ch of text) { span.textContent += ch; await sleep(item.cps ? 1000 / item.cps : 28); }
+        cur.remove(); span.innerHTML = item.html;
+      } else {
+        const span = document.createElement('span'); span.innerHTML = item.html; out.appendChild(span);
+      }
+      out.appendChild(document.createTextNode('\n'));
+      out.scrollTop = out.scrollHeight;
+    }
+    window.__done = true;
+  };
+</script>
+</body>
+</html>

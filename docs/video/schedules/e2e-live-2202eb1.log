@@ -1,0 +1,52 @@
+
+> paperstall-app@ test:e2e /Users/gwill/Developer/stellar-creator-store/app
+> tsx tests/store-flow.ts
+
+== setup
+== creator lists a product
+creator wallet CAWKLZLOU2DFUAGH3SRJMUJEZTLI2PP5VNA4G7GYDFGJA7YT3MXHTD3A
+listed product 29
+ok   product page shows $3.00
+== buyer 1: passkey wallet, through an affiliate link
+buyer wallet CC5LGXHGNBE6ZFDOOK5UF5M5WX3U2JZGCSX72H5J7H774C4U4A5Y3DLX, empty: asked to add USDC
+ok   buyer downloads exactly the file the creator uploaded
+ok   download keeps the original file name
+ok   the saved link works on another device
+ok   another browser can't get a link without buying
+ok   a forged link is refused
+== buyer 2: a Stellar wallet (G account), fee paid by the store
+  [stellar-buyer] Failed to load resource: the server responded with a status of 404 (Not Found)
+ok   the Stellar wallet buyer downloads the same file
+ok   the Stellar wallet paid no XLM for the purchase: the store fee-bumped it
+== creator on a second device
+ok   the passkey signs in to the same wallet on a new device
+ok   dashboard shows the creator's $4.20 from two sales
+ok   dashboard shows 2 sales
+ok   both sales are listed with their transactions
+ok   dashboard shows $1.20 held for the co-creator
+ok   co-creator received both 20% shares, 1.20 USDC
+ok   the creator paused sales on chain
+ok   a paused product leaves the public shelf
+ok   the shop page shows the creator's name
+ok   the shop page lists the product
+== buyer 1's library on another device
+ok   the library downloads the file on a new device
+== creator pays out to a wallet they own
+  [creator-device-2] Failed to load resource: the server responded with a status of 422 ()
+ok   a payout account that can't hold USDC is refused, with the reason
+ok   the creator saves their own Stellar wallet for payouts
+ok   nobody else can read the payout address
+ok   1 USDC reached the payout wallet
+ok   an exchange deposit is saved with its memo
+ok   0.5 USDC sent to the M-address reached the account under it
+== on chain
+ok   receipt recorded for the passkey buyer
+ok   receipt recorded for the Stellar wallet buyer
+ok   creator holds 4.20 USDC less the 1.50 paid out
+ok   affiliate received 0.30 USDC, only for the referred sale
+ok   passkey buyer has 7 of the 10 test USDC left
+ok   Stellar wallet buyer has 7 of the 10 test USDC left
+ok   nothing is left held in the contract
+ok   neither passkey wallet holds XLM: every fee was sponsored
+
+all 33 checks passed

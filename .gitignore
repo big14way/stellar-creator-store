@@ -3,3 +3,13 @@ target/
 .env
 .env.*
 .DS_Store
+
+# pitch video: recordings, passkeys, build cache and output stay local
+docs/video/clips/
+docs/video/creds/
+docs/video/.build/
+docs/video/out/
+docs/video/review/
+docs/video/node_modules/
+docs/video/build.log
+docs/video/record-*.log
