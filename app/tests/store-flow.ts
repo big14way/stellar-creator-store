@@ -26,8 +26,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { Keypair, Networks, TransactionBuilder } from "@stellar/stellar-sdk";
+import { strFromU8, unzipSync, zipSync } from "fflate";
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Page } from "playwright";
 import { STORE_ID, USDC_ID } from "../src/config";
+import { RECEIPT_FILE } from "../server/stamp";
 
 const NATIVE_XLM_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 const USDC_ASSET = "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
@@ -202,8 +204,22 @@ async function main() {
 
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
   openBrowser = browser;
-  const fileBytes = randomBytes(300 * 1024);
-  const fileHash = createHash("sha256").update(fileBytes).digest("hex");
+  // A real ZIP: each buyer's copy must hold exactly these files, plus a receipt naming them.
+  const packed = { "lagos-nights/drums.wav": new Uint8Array(randomBytes(300 * 1024)), "lagos-nights/README.txt": new TextEncoder().encode("Ten instrumentals.") };
+  const fileBytes = Buffer.from(zipSync(packed, { level: 0 }));
+  const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
+  /** The buyer's copy: every file the creator uploaded, unchanged, and a receipt for this buyer's purchase. */
+  const copyFor = (body: Buffer, buyer: string, tx: string | null): { ok: boolean; receipt: string } => {
+    try {
+      const files = unzipSync(new Uint8Array(body));
+      const receipt = files[RECEIPT_FILE] ? strFromU8(files[RECEIPT_FILE]) : "";
+      const same = Object.entries(packed).every(([name, bytes]) => files[name] && sha(files[name]) === sha(bytes));
+      const only = Object.keys(files).length === Object.keys(packed).length + 1;
+      return { ok: same && only && receipt.includes(buyer) && (!tx || receipt.includes(tx)), receipt };
+    } catch {
+      return { ok: false, receipt: "" };
+    }
+  };
   const price = 3n * ONE;
 
   console.log("== creator lists a product");
@@ -248,8 +264,9 @@ async function main() {
   const href = (await buyerPage.getByTestId("download").getAttribute("href"))!;
 
   const got = await buyerPage.request.get(`${APP}${href}`);
-  const gotHash = createHash("sha256").update(await got.body()).digest("hex");
-  check(got.status() === 200 && gotHash === fileHash, "buyer downloads exactly the file the creator uploaded");
+  const buyerTx = (await (await buyerPage.request.get(`${APP}/api/products/${productId}/access`)).json()).txHash as string | null;
+  const buyerCopy = copyFor(await got.body(), buyer, buyerTx);
+  check(got.status() === 200 && buyerCopy.ok, "buyer's copy has every file the creator uploaded, plus a receipt naming them and their transaction");
   check((got.headers()["content-disposition"] ?? "").includes("lagos-nights.zip"), "download keeps the original file name");
 
   const stranger = await (await browser.newContext()).newPage();
@@ -285,10 +302,9 @@ async function main() {
   await gPage.getByTestId("download").waitFor({ timeout: LONG }).catch(() => failWith(gPage, "Stellar wallet purchase failed"));
   const gHref = (await gPage.getByTestId("download").getAttribute("href"))!;
   const gGot = await gPage.request.get(`${APP}${gHref}`);
-  check(
-    createHash("sha256").update(await gGot.body()).digest("hex") === fileHash,
-    "the Stellar wallet buyer downloads the same file",
-  );
+  const gCopy = copyFor(await gGot.body(), gKey.publicKey(), null);
+  check(gCopy.ok, "the Stellar wallet buyer gets the same files, with their own receipt");
+  check(gCopy.receipt !== buyerCopy.receipt, "each buyer's copy is stamped differently, so a leaked copy traces back to its buyer");
   check((await xlmOf(gKey.publicKey())) === xlmBefore, "the Stellar wallet paid no XLM for the purchase: the store fee-bumped it");
 
   console.log("== creator on a second device");
@@ -311,6 +327,15 @@ async function main() {
   check((await c2.getByTestId("balance").textContent()) === "$4.20", "dashboard shows the creator's $4.20 from two sales");
   check((await c2.getByTestId("sales").textContent()) === "2", "dashboard shows 2 sales");
   check((await c2.getByTestId("sales-table").locator("tbody tr").count()) === 2, "both sales are listed with their transactions");
+  const statementHref = await c2.getByTestId("statement").getAttribute("href");
+  const statement = await c2.request.get(`${APP}${statementHref}`);
+  const lines = (await statement.text()).trim().split("\r\n");
+  const total = lines.at(-1)!.split(",");
+  check(
+    statement.ok() && lines.length === 4 && total[3] === "6.0000000" && total[4] === "0.3000000" && total[5] === "1.2000000" && total[6] === "0.3000000" && total[7] === "4.2000000",
+    "the earnings statement lists both sales split as the contract paid them: $6 in, $0.30 fee, $1.20 co-creator, $0.30 affiliate, $4.20 creator",
+  );
+  check((await stranger.request.get(`${APP}/api/statement/${creator}`)).status() === 403, "nobody else can download the creator's statement");
 
   await c2.getByTestId("co-held").waitFor({ timeout: 60_000 }).catch(() => failWith(c2, "held co-creator share not shown"));
   check((await c2.getByTestId("co-held").textContent())?.includes("$1.20") ?? false, "dashboard shows $1.20 held for the co-creator");
@@ -350,7 +375,7 @@ async function main() {
   await buyer2.page.getByTestId("library").waitFor({ timeout: LONG }).catch(() => failWith(buyer2.page, "library sign-in failed"));
   const libHref = (await buyer2.page.getByTestId("library-download").first().getAttribute("href"))!;
   const libGot = await buyer2.page.request.get(`${APP}${libHref}`);
-  check(createHash("sha256").update(await libGot.body()).digest("hex") === fileHash, "the library downloads the file on a new device");
+  check(copyFor(await libGot.body(), buyer, buyerTx).ok, "the library downloads the same stamped copy on a new device");
 
   console.log("== creator pays out to a wallet they own");
   // A fresh classic account that can't hold USDC yet: saving it is refused, with the reason.

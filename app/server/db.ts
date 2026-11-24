@@ -134,6 +134,11 @@ export async function openDb(sql: Sql) {
          on conflict (product_id, buyer) do nothing`,
         [productId, buyer, txHash, Date.now(), price],
       ),
+    purchase: (productId: number, buyer: string) =>
+      sql.get<{ tx_hash: string; created_at: number }>(
+        "select tx_hash, created_at from purchases where product_id = ? and buyer = ?",
+        [productId, buyer],
+      ),
     purchaseTx: async (productId: number, buyer: string) =>
       (await sql.get<{ tx_hash: string }>("select tx_hash from purchases where product_id = ? and buyer = ?", [productId, buyer]))
         ?.tx_hash ?? null,

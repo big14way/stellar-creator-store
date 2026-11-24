@@ -1392,6 +1392,21 @@ a.box:hover {
   margin-bottom: 12px;
 }
 
+.add-money {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule-dark);
+}
+
+.add-money > button {
+  justify-self: start;
+}
+
+.add-money .hint {
+  margin: 0;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 960px) {

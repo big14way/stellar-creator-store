@@ -10,8 +10,8 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Address, rpc, scValToNative, StrKey, Transaction, type xdr } from "@stellar/stellar-sdk";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { getProduct, hasPurchased, type ChainProduct } from "../src/chain";
-import { INDEXER_URL, NETWORK, NETWORK_PASSPHRASE, RPC_URL, STORE_ID, USDC_ID } from "../src/config";
+import { getProduct, getReceipt, hasPurchased, type ChainProduct } from "../src/chain";
+import { EXPLORER, INDEXER_URL, NETWORK, NETWORK_PASSPHRASE, RPC_URL, STORE_ID, USDC_ID } from "../src/config";
 import { newChallenge, passkeyRefusal, stellarAuth, type PasskeyAssertion } from "./auth";
 import { birthOf, mergeLookup } from "./births";
 import { openDb, type Profile, type ProductRow } from "./db";
@@ -20,6 +20,7 @@ import { diskFiles, sqlFiles } from "./files";
 import { decode, feeBumpRefusal, provenWallet, refusal, storeCall } from "./policy";
 import { sessions } from "./session";
 import { sponsor as makeSponsor } from "./sponsor";
+import { stampFile } from "./stamp";
 import { connect } from "./sql";
 import { guessKind, isKind } from "../src/kinds";
 import { checkPayout, parsePayout } from "../src/payout";
@@ -608,19 +609,126 @@ app.get("/api/library", async (c) => {
   });
 });
 
+/** A stored file as bytes (it is a stream when it comes from disk). */
+async function bytesOf(body: ReadableStream<Uint8Array> | Uint8Array): Promise<Uint8Array> {
+  return body instanceof Uint8Array ? body : new Uint8Array(await new Response(body).arrayBuffer());
+}
+
 app.get("/d/:token", async (c) => {
   const grant = session.readDownloadToken(c.req.param("token"));
   const row = grant ? await db.product(grant.productId) : undefined;
   if (!grant || !row) return c.text("This download link is not valid.", 404);
   if (!(await owns(grant.productId, grant.buyer))) return c.text("No purchase found for this link.", 403);
-  const body = await files.body(row.file_key);
-  if (!body) return c.text("This file is missing. Contact the creator.", 410);
-  return c.body(body, 200, {
+  const stored = await files.body(row.file_key);
+  if (!stored) return c.text("This file is missing. Contact the creator.", 410);
+  // The buyer's copy carries their receipt (PDFs and ZIPs; see stamp.ts).
+  const bytes = await bytesOf(stored);
+  const purchase = await db.purchase(grant.productId, grant.buyer);
+  const stamped = await stampFile(bytes, {
+    productId: row.id,
+    product: row.title,
+    buyer: grant.buyer,
+    tx: purchase?.tx_hash ?? null,
+    at: purchase?.created_at ?? null,
+    site: new URL(ORIGINS[0]).host,
+    explorer: purchase ? `${EXPLORER}/tx/${purchase.tx_hash}` : null,
+  });
+  const body = stamped ?? bytes;
+  return c.body(body as Uint8Array<ArrayBuffer>, 200, {
     "Content-Type": row.file_type,
-    "Content-Length": String(row.file_size),
+    "Content-Length": String(body.length),
     "Content-Disposition": `attachment; filename="${row.file_name.replace(/"/g, "")}"`,
     "Cache-Control": "private, no-store",
     ...UNTRUSTED,
+  });
+});
+
+// ---- earnings statement: every sale of the creator's products, split as the contract paid it ----
+
+const BPS = 10_000n;
+const usdc = (units: bigint) => {
+  const sign = units < 0n ? "-" : "";
+  const abs = units < 0n ? -units : units;
+  return `${sign}${abs / 10_000_000n}.${(abs % 10_000_000n).toString().padStart(7, "0")}`;
+};
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  // Quote anything with a comma, quote or line break; neutralise spreadsheet formulas.
+  const safe = /^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s) ? `'${s}` : s;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+};
+
+/** Runs `fn` over `items` with at most `n` at a time. */
+async function mapLimit<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(n, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await fn(items[i]);
+      }
+    }),
+  );
+  return out;
+}
+
+app.get("/api/statement/:wallet", async (c) => {
+  const wallet = c.req.param("wallet");
+  if (!isWallet(wallet)) return c.json({ error: "wallet must be a Stellar address" }, 400);
+  if (!(await isOwner(c, wallet))) return c.json({ error: "sign in with this wallet first" }, 403);
+  if (!(await allow(c, "statement", 30, HOUR))) return c.json({ error: "too many requests" }, 429);
+
+  const sales = (await db.recentSales(10_000, wallet)).reverse(); // oldest first
+  const products = new Map<number, ChainProduct | null>();
+  for (const id of new Set(sales.map((s) => s.product_id))) products.set(id, await getProduct(id).catch(() => null));
+  const receipts = await mapLimit(sales, 4, (s) => getReceipt(s.product_id, s.buyer).catch(() => null));
+
+  const header = [
+    "Date (UTC)", "Product", "Product ID", "Sale price (USDC)", "Platform fee (USDC)", "Co-creators (USDC)",
+    "Affiliate (USDC)", "Your share (USDC)", "Buyer", "Affiliate", "Transaction", "Explorer link",
+  ];
+  const rows: (string | number)[][] = [];
+  const total = { price: 0n, fee: 0n, shares: 0n, affiliate: 0n, mine: 0n };
+  sales.forEach((s, i) => {
+    const product = products.get(s.product_id);
+    const receipt = receipts[i];
+    const price = receipt ? BigInt(receipt.price) : s.price ? BigInt(s.price) : null;
+    if (price === null || !product) {
+      rows.push([new Date(s.created_at).toISOString(), s.title, s.product_id, s.price ? usdc(BigInt(s.price)) : "", "", "", "", "", s.buyer, "", s.tx_hash, `${EXPLORER}/tx/${s.tx_hash}`]);
+      return;
+    }
+    // The contract's own arithmetic (contracts/store: cut = price * bps / 10000; the creator gets the rest).
+    const cut = (bps: number) => (price * BigInt(bps)) / BPS;
+    const fee = cut(product.fee_bps);
+    const shares = product.shares.reduce((sum, sh) => sum + cut(sh.bps), 0n);
+    total.price += price;
+    total.fee += fee;
+    total.shares += shares;
+    // Fee and shares are fixed at listing. Whether an affiliate was paid is in the receipt; once a
+    // receipt is archived, a product with an affiliate share can't say, so those cells stay blank.
+    const unknown = !receipt && product.affiliate_bps > 0;
+    const affiliateAddr = receipt?.affiliate ?? null;
+    const affiliate = affiliateAddr ? cut(product.affiliate_bps) : 0n;
+    const mine = price - fee - shares - affiliate;
+    if (!unknown) {
+      total.affiliate += affiliate;
+      total.mine += mine;
+    }
+    rows.push([
+      new Date(s.created_at).toISOString(), s.title, s.product_id, usdc(price), usdc(fee), usdc(shares),
+      unknown ? "" : usdc(affiliate), unknown ? "" : usdc(mine),
+      s.buyer, affiliateAddr ?? (unknown ? "unknown (receipt archived)" : "none"), s.tx_hash, `${EXPLORER}/tx/${s.tx_hash}`,
+    ]);
+  });
+  rows.push(["Total", `${sales.length} sales`, "", usdc(total.price), usdc(total.fee), usdc(total.shares), usdc(total.affiliate), usdc(total.mine), "", "", "", ""]);
+
+  const csv = [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+  const name = `paperstall-statement-${wallet.slice(0, 6)}-${new Date().toISOString().slice(0, 10)}.csv`;
+  return c.body(csv, 200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${name}"`,
+    "Cache-Control": "private, no-store",
   });
 });
 

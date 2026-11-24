@@ -1,4 +1,4 @@
-import { ArrowRight, Banknote, Check, Copy, ExternalLink, Fingerprint, Pause, Pencil, Play, Send, Tag } from "lucide-react";
+import { ArrowRight, Banknote, Check, Copy, ExternalLink, FileDown, Fingerprint, Pause, Pencil, Play, Send, Tag } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "wouter";
 import { anchorSignIn, sendUsdc, startWithdrawal, STATUS_TEXT, withdrawal, payee, type AnchorTx } from "../anchor";
@@ -221,6 +221,15 @@ export function Dashboard() {
             <>
               <div className="bar" style={{ marginTop: 56 }}>
                 <span className="eyebrow">Recent sales</span>
+                <a
+                  className="text-link"
+                  href={`/api/statement/${wallet}`}
+                  download
+                  data-testid="statement"
+                  title="Every sale of your products, split the way the contract paid it, as a spreadsheet for your records and tax"
+                >
+                  <FileDown size={14} /> Earnings statement (CSV)
+                </a>
               </div>
               <div className="table-wrap">
                 <table className="table" data-testid="sales-table">

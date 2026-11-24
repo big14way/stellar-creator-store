@@ -5,6 +5,7 @@ import { api, fileSize, shopPath, type Access, type Config, type Product, type S
 import { formatUsdc, formatUsdcUp, usdcBalance } from "../chain";
 import { accountState, addUsdc, buyWithStellar, friendbot, type AccountState } from "../stellarWallet";
 import { kindOf } from "../kinds";
+import { AddMoney } from "../AddMoney";
 import { Headline, Reveal } from "../motion";
 import {
   explorerTx,
@@ -358,6 +359,7 @@ export function ProductPage({ id }: { id: string }) {
                           </button>
                         )}
                       </div>
+                      <AddMoney wallet={wallet!} short={shortOf} onAdded={() => refreshBalance(wallet!)} />
                     </div>
                   )}
                   {wallet && balance !== null && shortOf === null && (

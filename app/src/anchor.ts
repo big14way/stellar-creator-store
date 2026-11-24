@@ -6,6 +6,9 @@
 // 3. SEP-24: open the anchor's own form (bank details, KYC), then pay it the
 //    USDC with a token transfer the store sponsors. A memo ID travels inside a
 //    muxed (M...) address, since contract payments carry no transaction memo.
+//
+// Adding money is the same in reverse: SEP-45 sign-in, then a SEP-24 deposit
+// where the buyer pays the anchor by bank or card and it sends USDC to the wallet.
 
 import { Account, Address, MuxedAccount, rpc, scValToNative, StellarToml, xdr } from "@stellar/stellar-sdk";
 import { buildDirectTokenTransfer } from "smart-account-kit";
@@ -157,6 +160,36 @@ export async function startWithdrawal(token: string, wallet: string, amount: str
   );
 }
 
+/** Plain words for SEP-24 statuses while money comes in. */
+export const DEPOSIT_STATUS_TEXT: Record<string, string> = {
+  ...STATUS_TEXT,
+  pending_user_transfer_start: "Waiting for your bank or card payment",
+  pending_user_transfer_complete: "The anchor has your payment",
+  pending_external: "Waiting on the bank",
+  pending_stellar: "Sending USDC to your wallet",
+  completed: "USDC added to your wallet",
+};
+
+/** SEP-24: starts a USDC deposit into the wallet (bank or card to USDC) and returns the anchor's form URL. */
+export async function startDeposit(token: string, wallet: string, amount?: string): Promise<{ id: string; url: string }> {
+  const { TRANSFER_SERVER_SEP0024: server } = await anchorToml();
+  if (!server) throw new Error(`${ANCHOR_DOMAIN} has no SEP-24 server`);
+  return json<{ id: string; url: string }>(
+    await fetch(`${server}/transactions/deposit/interactive`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        asset_code: USDC_CODE,
+        asset_issuer: USDC_ISSUER,
+        account: wallet,
+        ...(amount ? { amount } : {}),
+        lang: "en",
+      }),
+    }),
+  );
+}
+
+/** A deposit or withdrawal, as the anchor sees it now. */
 export async function withdrawal(token: string, id: string): Promise<AnchorTx> {
   const { TRANSFER_SERVER_SEP0024: server } = await anchorToml();
   const { transaction } = await json<{ transaction: AnchorTx }>(
@@ -189,3 +222,5 @@ export async function sendUsdc(wallet: string, to: string, amountUnits: bigint):
   if (!res.success) throw new Error(explain(res.error.message));
   return res.hash!;
 }
+
+export const anchorTransaction = withdrawal;

@@ -33,10 +33,13 @@ Creators in Nigeria and Ghana (designers, tutors, coders, musicians) earn by sel
 | **Pay with a Stellar wallet** | Freighter, LOBSTR, xBull, Albedo, Hana, Rabet and others through Stellar Wallets Kit. The store pays the network fee with a fee-bump transaction. |
 | **No fees in XLM, ever** | A fee sponsor pays every network fee under strict rules, so passkey wallets never hold XLM. |
 | **Receipts unlock downloads** | The sale recorded on chain is the receipt. The server checks it before serving a file, and gives the buyer a private link that works on any device. |
+| **Every copy carries its receipt** | A PDF gets a line at the foot of each page naming the buyer's wallet and their transaction, plus the receipt in its document properties; a ZIP gets a receipt file. Each buyer's copy is different, so a leaked copy traces back to the purchase. ([`server/stamp.ts`](app/server/stamp.ts)) |
 | **A library on any device** | Buyers sign in with the passkey or Stellar wallet they paid with and find everything they bought. |
 | **Shops** | Each creator gets a shop page (`/c/yourname`) with their name, bio and products. |
 | **Dashboard** | Balance with a naira and cedi estimate, every sale with its transaction, edit, reprice or pause products, pay out co-creators' held shares, send USDC anywhere. |
+| **Earnings statement** | A spreadsheet (CSV) of every sale of the creator's products, split exactly as the contract paid it: price, platform fee, co-creators, affiliate, the creator's share, buyer and transaction. For records and tax. |
 | **Payout wallet** | The creator saves a Stellar wallet they hold the keys to, or an exchange deposit address with its number memo. Paperstall checks on Stellar that it exists and can hold USDC, then sends there in one tap. A guide shows the routes to naira (Busha) and cedis (MoneyGram cash pickup). |
+| **Add money by bank or card** | A buyer with no USDC signs in to a Stellar anchor with their passkey (SEP-45) and opens a deposit (SEP-24): they pay the anchor in its own form and it sends USDC to the passkey wallet. On testnet this is Stellar's test anchor. On 24 Nov 2026 it accepted deposits to passkey wallets and tried to pay them, but its USDC account was short (`Error(Contract, #10)`), so the faucet is the testnet way to get USDC until it is topped up. |
 | **Anchor cash-out, rehearsed** | Sign in to a Stellar anchor with the passkey wallet (SEP-45), fill in its own form (SEP-24), and send it the USDC. On testnet this runs against Stellar's test anchor, so no real bank is paid. |
 
 ## How it uses Stellar
@@ -50,7 +53,7 @@ Creators in Nigeria and Ghana (designers, tutors, coders, musicians) earn by sel
 | Stellar Wallets Kit | [`src/stellarWallet.ts`](app/src/stellarWallet.ts) | Checkout and sign-in for Freighter, LOBSTR, xBull, Albedo and more |
 | SEP-10 style sign-in | [`server/auth.ts`](app/server/auth.ts) | A Stellar wallet signs a challenge transaction that can never be submitted |
 | WebAuthn against on-chain signers | [`server/auth.ts`](app/server/auth.ts) | Passkey sign-in on any device, checked against the public key stored in the wallet's contract |
-| SEP-1, SEP-45, SEP-24 | [`src/anchor.ts`](app/src/anchor.ts) | Anchor discovery, sign-in for contract accounts, interactive withdrawal |
+| SEP-1, SEP-45, SEP-24 | [`src/anchor.ts`](app/src/anchor.ts), [`src/AddMoney.tsx`](app/src/AddMoney.tsx) | Anchor discovery, sign-in for contract accounts, interactive deposit and withdrawal |
 | Muxed addresses (CAP-67) | [`src/anchor.ts`](app/src/anchor.ts) | A contract wallet can't attach a memo, so the anchor's memo ID travels inside an M-address |
 | Smart-account indexer | [`server/births.ts`](app/server/births.ts) | Finds a passkey wallet on a new device. Our server fills in creation records the public indexer hasn't caught up with; the kit verifies them on chain |
 
@@ -187,8 +190,9 @@ The anchor flow is still in the dashboard as a rehearsal: on testnet it signs in
 ```sh
 cd app
 pnpm install
-pnpm test        # 29 unit tests: sponsor rules, sign-in checks, wallet records, the database
+pnpm test        # 48 unit tests: sponsor rules, sign-in checks, wallet records, the database, receipt stamps
 pnpm test:cashout # a passkey wallet cashes out through the SDF test anchor (SEP-45 + SEP-24)
+APP_URL=https://paperstallhq.vercel.app PRODUCT=19 pnpm exec tsx tests/deposit.ts # a new passkey wallet adds money through the test anchor
 pnpm test:e2e    # the whole store on testnet, in headless Chromium with virtual passkeys
 ```
 
@@ -212,11 +216,12 @@ Then open http://localhost:5173. The sponsor needs testnet XLM (`stellar keys fu
 5. The first buyer signs in on another device and downloads from their library.
 6. The creator saves a payout wallet: one that can't hold USDC yet is refused with the reason, then accepted once it adds USDC. They send 1 USDC there, then save the same account as an exchange deposit with a memo and send 0.5 USDC to the M-address.
 
-`APP_URL=https://paperstallhq.vercel.app pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 24 Nov 2026, after the move to Vercel, all 33 checks passed against the live site.
+`APP_URL=https://paperstallhq.vercel.app pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 24 Nov 2026, with receipt-stamped downloads and the earnings statement, all 36 checks passed against the live site.
 
 It checks:
 
-- the bytes match the upload
+- each buyer's copy holds every file the creator uploaded, unchanged, plus a receipt naming that buyer and their transaction; two buyers' copies differ
+- the earnings statement splits both sales exactly as the contract paid them, and only the creator can download it
 - the saved link works in another browser
 - a browser that didn't buy gets no link, and a forged link is refused
 - the Stellar wallet paid no XLM for its purchase

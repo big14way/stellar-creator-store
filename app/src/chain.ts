@@ -54,6 +54,11 @@ export async function getProduct(id: bigint | number | string): Promise<ChainPro
 export const hasPurchased = (id: bigint | number | string, buyer: string) =>
   read<boolean>(STORE_ID, "has_purchased", u64(id), address(buyer));
 
+/** The contract's proof of purchase, or null if this wallet didn't buy it (or the entry was archived). */
+export type ChainReceipt = { product_id: bigint; buyer: string; price: bigint; affiliate?: string | null; timestamp: bigint; sale_number: number };
+export const getReceipt = (id: bigint | number | string, buyer: string) =>
+  read<ChainReceipt | null>(STORE_ID, "receipt", u64(id), address(buyer));
+
 export const owedTo = (who: string) => read<bigint>(STORE_ID, "owed", address(who));
 
 export const usdcBalance = (who: string) => read<bigint>(USDC_ID, "balance", address(who));
