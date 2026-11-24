@@ -17,7 +17,7 @@
 // Needs the stellar CLI. Creates or tops up testnet identities cs-sponsor,
 // cs-faucet and cs-affiliate, and a fresh co-creator each run.
 //
-// APP_URL=https://paperstall.onrender.com runs the same checks against a
+// APP_URL=https://paperstallhq.vercel.app runs the same checks against a
 // deployed site instead of starting one (its own faucet must hold test USDC).
 // There the listing is named as a test and paused at the end, so it leaves
 // the public shelf.

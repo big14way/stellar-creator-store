@@ -6,7 +6,7 @@
 // 2. A buyer takes test USDC from the site's faucet and buys one of them, and
 //    the download is checked byte for byte.
 //
-//   APP_URL=https://paperstall.onrender.com pnpm seed:demo
+//   APP_URL=https://paperstallhq.vercel.app pnpm seed:demo
 //
 // The products are real: synthesized drum one-shots (built here), an invoice
 // template (scripts/demo/invoice.html) and a checklist (scripts/demo/checklist.md),
@@ -270,7 +270,7 @@ async function failWith(page: Page, what: string): Promise<never> {
 }
 
 async function main() {
-  if (!APP) throw new Error("set APP_URL, e.g. APP_URL=https://paperstall.onrender.com");
+  if (!APP) throw new Error("set APP_URL, e.g. APP_URL=https://paperstallhq.vercel.app");
   if (existsSync(SAVED)) throw new Error(`${SAVED} exists: this site was already seeded`);
   for (let i = 0; i < 180 && !(await fetch(`${APP}/api/config`).then((r) => r.ok, () => false)); i++) {
     await new Promise((r) => setTimeout(r, 1000)); // a free host may be waking up

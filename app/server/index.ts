@@ -25,13 +25,15 @@ import { guessKind, isKind } from "../src/kinds";
 import { checkPayout, parsePayout } from "../src/payout";
 import { IMAGE_TYPES, imageType, UNTRUSTED } from "./uploads";
 
+// On Vercel the platform serves the web app and runs `app` per request (server/vercel.ts).
+const ON_VERCEL = !!process.env.VERCEL;
 const PORT = Number(process.env.PORT ?? 8790);
 const DATA_DIR = process.env.DATA_DIR ?? ".data";
 const PRODUCTION = process.env.NODE_ENV === "production";
 const MAX_FILE_MB = Number(process.env.MAX_FILE_MB ?? 50);
 const MAX_FILE = MAX_FILE_MB * 1024 * 1024;
 const MAX_COVER = 5 * 1024 * 1024;
-// The request header the host's proxy sets to the client's IP, e.g. cf-connecting-ip on Render.
+// The request header the host's proxy sets to the client's IP: cf-connecting-ip on Render, x-real-ip on Vercel.
 const CLIENT_IP_HEADER = process.env.CLIENT_IP_HEADER?.trim().toLowerCase() || null;
 const FAUCET_AMOUNT = 10_0000000n; // 10 USDC
 const HOUR = 60 * 60 * 1000;
@@ -86,7 +88,12 @@ const stellarSignIn = stellarAuth(sessionSecret, new URL(ORIGINS[0]).host);
  */
 function clientIp(c: Context): string {
   const fromProxy = CLIENT_IP_HEADER ? c.req.header(CLIENT_IP_HEADER)?.trim() : undefined;
-  return fromProxy || getConnInfo(c).remote.address || "unknown";
+  if (fromProxy) return fromProxy;
+  try {
+    return getConnInfo(c).remote.address || "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 /** Per client IP (and optionally a key), fixed windows, kept in the database. */
@@ -166,7 +173,7 @@ async function recordPurchase(func: xdr.HostFunction, hash: string, returnValue?
   await db.addPurchase(productId, buyer, hash, receipt?.price?.toString() ?? null);
 }
 
-const app = new Hono();
+export const app = new Hono();
 
 app.use("*", async (c, next) => {
   await next();
@@ -666,25 +673,27 @@ app.post("/api/faucet", async (c) => {
 
 app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
 
-if (PRODUCTION) {
+if (PRODUCTION && !ON_VERCEL) {
   const indexHtml = readFileSync("dist/index.html", "utf8");
   app.use("/assets/*", serveStatic({ root: "./dist", onFound: (_, c) => c.header("Cache-Control", "public, max-age=31536000, immutable") }));
   app.use("/*", serveStatic({ root: "./dist" }));
   app.get("*", (c) => c.html(indexHtml));
 }
 
-const server = serve({ fetch: app.fetch, port: PORT, hostname: PRODUCTION ? "0.0.0.0" : "127.0.0.1" }, () => {
-  console.log(
-    `server on :${PORT} (${sql.dialect}), sponsor ${sponsor.address}${faucet ? `, faucet ${faucet.address}` : ""}, origins ${ORIGINS.join(" ")}`,
-  );
-});
-
-// Hosts stop instances with SIGTERM (on deploys, and free instances when idle):
-// finish in-flight requests, close the database, and exit cleanly.
-for (const signal of ["SIGTERM", "SIGINT"] as const) {
-  process.once(signal, () => {
-    console.log(`${signal}: shutting down`);
-    setTimeout(() => process.exit(0), 8_000).unref();
-    server.close(() => void sql.close().finally(() => process.exit(0)));
+if (!ON_VERCEL) {
+  const server = serve({ fetch: app.fetch, port: PORT, hostname: PRODUCTION ? "0.0.0.0" : "127.0.0.1" }, () => {
+    console.log(
+      `server on :${PORT} (${sql.dialect}), sponsor ${sponsor.address}${faucet ? `, faucet ${faucet.address}` : ""}, origins ${ORIGINS.join(" ")}`,
+    );
   });
+
+  // Hosts stop instances with SIGTERM (on deploys, and free instances when idle):
+  // finish in-flight requests, close the database, and exit cleanly.
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+      console.log(`${signal}: shutting down`);
+      setTimeout(() => process.exit(0), 8_000).unref();
+      server.close(() => void sql.close().finally(() => process.exit(0)));
+    });
+  }
 }

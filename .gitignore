@@ -13,3 +13,6 @@ docs/video/review/
 docs/video/node_modules/
 docs/video/build.log
 docs/video/record-*.log
+
+# Vercel build output and project link
+.vercel/

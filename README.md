@@ -4,13 +4,13 @@
 
 A creator store for Nigeria and Ghana, built for the Stellar Buildathon (Builder's Circle). Creators list templates, ebooks, courses and beat packs; buyers pay in USDC with a passkey or any Stellar wallet; a Soroban contract pays the creator, co-creators, the affiliate and the platform in the same transaction; creators keep dollars or cash out through a Stellar anchor.
 
-> **Live demo (testnet): https://paperstall.onrender.com** · [demo shop](https://paperstall.onrender.com/c/demo)
+> **Live demo (testnet): https://paperstallhq.vercel.app** · [demo shop](https://paperstallhq.vercel.app/c/demo)
 >
 > **Status:** works end to end on Stellar testnet with Circle's testnet USDC: listing, two ways to pay, downloads, affiliates, co-creator splits, sign-in on any device, creator shops and cash-out through the SDF test anchor. Mainnet needs a funded fee sponsor and a deployed store contract (see [Mainnet](#mainnet)).
 
 ## Try it
 
-Open **https://paperstall.onrender.com** (free hosting: after a quiet spell the first visit takes up to a minute to wake the server). The [demo shop](https://paperstall.onrender.com/c/demo) has three real products made for it (a drum sample pack, an invoice template and a checklist, all CC0) to buy with test USDC. Or run it locally (below). Then, in about two minutes:
+Open **https://paperstallhq.vercel.app**. The [demo shop](https://paperstallhq.vercel.app/c/demo) has three real products made for it (a drum sample pack, an invoice template and a checklist, all CC0) to buy with test USDC. Or run it locally (below). Then, in about two minutes:
 
 1. **Sell:** open `/sell`, create a wallet with your fingerprint or face, upload any file, set a price and a co-creator, and sign the listing.
 2. **Buy:** open the product in another browser profile. Either make a passkey wallet and press **Get 10 test USDC**, or press **Pay with a Stellar wallet** and use Freighter, LOBSTR, xBull or Albedo on testnet. Pay, and download.
@@ -212,7 +212,7 @@ Then open http://localhost:5173. The sponsor needs testnet XLM (`stellar keys fu
 5. The first buyer signs in on another device and downloads from their library.
 6. The creator saves a payout wallet: one that can't hold USDC yet is refused with the reason, then accepted once it adds USDC. They send 1 USDC there, then save the same account as an exchange deposit with a memo and send 0.5 USDC to the M-address.
 
-`APP_URL=https://paperstall.onrender.com pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 15 Nov 2026, after the security fixes, all 27 checks passed against the live site.
+`APP_URL=https://paperstallhq.vercel.app pnpm test:e2e` runs the same people and checks against a deployed site instead; the test listing is paused at the end so it leaves the shelf. On 24 Nov 2026, after the move to Vercel, all 33 checks passed against the live site.
 
 It checks:
 
@@ -226,9 +226,23 @@ It checks:
 
 ### Deploy
 
-[`render.yaml`](render.yaml) is a Render blueprint for one free web service. Give it a Postgres `DATABASE_URL` (a free Neon database works), `PUBLIC_URL`, and testnet `SPONSOR_SECRET` and `FAUCET_SECRET`.
+The live demo runs on Vercel with a free Neon Postgres database. Both are in Frankfurt. The web app is served as static files, and the server runs as one Node function ([`server/vercel.ts`](app/server/vercel.ts)) that answers `/api/*` and the `/d/*` download links. From `app/`:
 
-The live demo runs exactly this: a free Render web service and a free Neon Postgres database, both in Frankfurt, deployed on every push to `main`. Its sponsor and faucet are testnet accounts of their own; the faucet holds test USDC bought on the testnet DEX. `APP_URL=… pnpm seed:demo` stocks a new site's demo shop through the site itself (a virtual passkey lists the products, then a buyer pays with faucet USDC and the download is checked).
+```sh
+node scripts/build-vercel.mjs        # pnpm build, then bundles the server into .vercel/output
+vercel deploy --prebuilt --prod
+```
+
+The project needs these environment variables: `DATABASE_URL`, `PUBLIC_URL` (`https://paperstallhq.vercel.app`), `SESSION_SECRET`, testnet `SPONSOR_SECRET` and `FAUCET_SECRET`, `CLIENT_IP_HEADER=x-real-ip` and `MAX_FILE_MB=3` (a Vercel function takes requests up to 4.5 MB). The sponsor and faucet are testnet accounts of their own; the faucet holds test USDC bought on the testnet DEX. `APP_URL=… pnpm seed:demo` stocks a new site's demo shop through the site itself (a virtual passkey lists the products, then a buyer pays with faucet USDC and the download is checked).
+
+The same server also runs as a plain Node process (`pnpm start`). [`render.yaml`](render.yaml) is a Render blueprint for that, with `CLIENT_IP_HEADER=cf-connecting-ip`.
+
+The store contract extends its own storage 30 days ahead when it's used. After a quiet spell, the first call pays that catch-up rent, which can be more than the sponsor's per-call cap. Extending the contract's instance and code ahead of time keeps calls cheap:
+
+```sh
+stellar contract extend --id <store> --durability persistent --ledgers-to-extend 1036800 --source <admin> --network testnet
+stellar contract extend --wasm <deployed.wasm> --durability persistent --ledgers-to-extend 1036800 --source <admin> --network testnet
+```
 
 ### Mainnet
 

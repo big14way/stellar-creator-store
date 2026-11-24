@@ -1,3 +1,5 @@
 dist/
 .data/
 .data-*/
+.vercel
+.env*
